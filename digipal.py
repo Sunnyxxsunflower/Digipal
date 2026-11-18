@@ -177,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 15                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 16                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1257,6 +1257,7 @@ class CustomizeDialog(QDialog):
             dock.addWidget(done)
             pl.addLayout(dock)
             self.show_page(0)
+            self.room_bubble = RoomBubble(pet, self)
             col = QVBoxLayout(look)
             col.setContentsMargins(2, 2, 6, 2)
         else:
@@ -1504,6 +1505,8 @@ class CustomizeDialog(QDialog):
         self.anim_k = getattr(self, "anim_k", 0) + 1
         try:
             self.update_preview()
+            if self.in_room:
+                self.room_bubble.follow()
         except Exception as ex:
             self.anim.stop()
             print("preview:", ex, file=sys.stderr, flush=True)
@@ -2215,6 +2218,9 @@ class BubbleWin(QWidget):
     def follow(self):
         pet = self.pet
         text = pet.msg
+        cw = getattr(pet, "custom_win", None)
+        if cw is not None and cw.isVisible() and getattr(cw, "in_room", False):
+            text = None                  # she talks inside her room while Customize is open
         if not text or not pet.isVisible() or getattr(pet, "hidden_for_shot", False):
             if self.isVisible():
                 self.hide()
@@ -2385,6 +2391,50 @@ class BubbleWin(QWidget):
             pet.msg = None
             pet.msg_ticks = 0
             self.hide()
+
+
+class RoomBubble(BubbleWin):
+    """Her bubble inside the Customize room, over the Digi standing on the rug."""
+
+    def __init__(self, pet, dialog):
+        QWidget.__init__(self, dialog)
+        self.pet = pet
+        self.dialog = dialog
+        self.key = None
+        self.layout_ = None
+        self.side = "above"
+        self.hide()
+
+    def follow(self):
+        pet, dlg = self.pet, self.dialog
+        text = pet.msg
+        if not text:
+            if self.isVisible():
+                self.hide()
+            return
+        side = "above" if getattr(pet, "bubble_pos", "above") == "above" else "left"
+        key = (text, side, pet.bubble_shape, pet.bubble_mode, pet.text_size)
+        if key != self.key:
+            self.key = key
+            self.side = side
+            self.layout_ = self.measure(text, "above" if side == "above" else "side")
+            self.resize(self.layout_["w"], self.layout_["h"])
+            self.update()
+        w, h = self.layout_["w"], self.layout_["h"]
+        pv = dlg.preview.geometry()
+        if side == "above":
+            x = pv.center().x() - w // 2
+            y = pv.y() + int(pv.height() * 0.16) - h
+        else:
+            x = pv.x() + int(pv.width() * 0.2) - w
+            y = pv.y() + int(pv.height() * 0.32) - h // 2
+        x = max(4, min(dlg.width() - w - 4, x))
+        y = max(4, min(dlg.height() - h - 4, y))
+        if (self.x(), self.y()) != (x, y):
+            self.move(x, y)
+        if not self.isVisible():
+            self.show()
+        self.raise_()
 
 
 class Pet(QWidget):
