@@ -53,6 +53,22 @@ def running(*names):
     return any(n in want for n, _ in processes())
 
 
+def obs_running():
+    return running("obs64.exe", "obs32.exe", "obs.exe")
+
+
+def screenshot_running():
+    return running("screenclippinghost.exe", "snippingtool.exe")
+
+
+def steam_state():
+    """(Steam is open, a Steam game is running)"""
+    procs = processes()
+    steam = any(n == "steam.exe" for n, _ in procs)
+    game = steam and any("\\steamapps\\common\\" in (x or "").lower() for _, x in procs)
+    return steam, game
+
+
 # ------------------------------------------------------------------ keyboard / idle
 class _LASTINPUTINFO(ctypes.Structure):
     _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]

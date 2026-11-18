@@ -29,5 +29,19 @@ Digi checks for updates once a day. When there's one, she tells you. Right-click
 ### Closing her
 Right-click Digi → **Quit**.
 
+## Install on Linux
+
+Digi works best on desktops running **X11** (on Wayland she runs through XWayland automatically, but sitting on windows and noticing other apps may not work there).
+
+1. On this page, click the green **Code** button → **Download ZIP**, and unzip it somewhere you'll keep it.
+2. Open a terminal in that folder and run:
+   ```
+   bash install_linux.sh
+   ```
+   It sets up everything Digi needs in its own little space (it won't touch your system Python), downloads her pictures (about 800 MB) and her offline voice (about 40 MB), and adds **DigiPal** to your apps menu.
+3. If voice doesn't work, install PortAudio: `sudo apt install libportaudio2` (Ubuntu/Debian) or `sudo dnf install portaudio` (Fedora).
+
+If something acts weird, send the **digipal.log** file from Digi's folder to whoever shared her with you.
+
 ## Mac
 The Mac version is coming soon!

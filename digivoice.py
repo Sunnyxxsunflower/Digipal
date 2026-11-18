@@ -571,3 +571,13 @@ if sys.platform == "win32":
     except Exception as _ex:
         log("Windows ears didn't load:", _ex)
         HAS_VOICE = False
+
+# ------------------------------------------------------------------ Linux
+# On Linux her ears use Vosk, which works offline (digiears_linux.py).
+if sys.platform.startswith("linux"):
+    try:
+        from digiears_linux import (Ears, HAS_VOICE, list_microphones,  # noqa: F401,F811
+                                    default_microphone_id)
+    except Exception as _ex:
+        log("Linux ears didn't load:", _ex)
+        HAS_VOICE = False

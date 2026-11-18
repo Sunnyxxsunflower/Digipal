@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "frames_version": 1,
   "frames_mb": 800,
   "frames_url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-1/pet_frames.zip",
@@ -12,6 +12,9 @@
     "digipal.ico",
     "setup_digipal.ps1",
     "Install DigiPal.bat",
+    "digilinux.py",
+    "digiears_linux.py",
+    "install_linux.sh",
     "version.json"
   ]
 }

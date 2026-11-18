@@ -22,8 +22,16 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
 from PySide6.QtCore import QTime
 
 IS_WIN = sys.platform == "win32"
-if IS_WIN and sys.stderr is None:
-    # started without a console window (pythonw): keep a log next to Digi instead
+IS_LINUX = sys.platform.startswith("linux")
+IS_MAC = sys.platform == "darwin"
+HELPER = IS_WIN or IS_LINUX          # these use the digiwin / digilinux helper module
+if IS_LINUX and os.environ.get("WAYLAND_DISPLAY") and os.environ.get("DISPLAY") \
+        and "QT_QPA_PLATFORM" not in os.environ:
+    # Wayland doesn't let apps place their own windows (she couldn't walk around), so she
+    # runs through XWayland instead
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
+if (IS_WIN and sys.stderr is None) or IS_LINUX:
+    # started without a console window (pythonw / app menu): keep a log next to Digi instead
     try:
         _log = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "digipal.log"),
                     "a", encoding="utf-8", buffering=1)
@@ -38,9 +46,21 @@ except Exception as _ex:
     dv = None
 
 try:
-    import digiwin as W             # Windows versions of the Mac-only tricks
-except Exception:
+    if IS_WIN:
+        import digiwin as W         # Windows versions of the Mac-only tricks
+    elif IS_LINUX:
+        import digilinux as W       # ...and the Linux versions
+    else:
+        W = None
+except Exception as _ex:
+    print("platform helper didn't load:", _ex, file=sys.stderr)
     W = None
+
+DEFAULT_MIC = "Mac default" if IS_MAC else "System default"
+
+# what to run again if something's missing
+INSTALL_HINT = ("Run 'Install DigiPal' again~" if IS_WIN else
+                "Run install_linux.sh again~" if IS_LINUX else "Run 'Install Digi's Ears'~")
 
 try:
     from AppKit import NSWorkspace
@@ -55,10 +75,10 @@ except Exception:
     HAS_QUARTZ = False
 
 # on Windows, keep her (and her toys) out of the taskbar
-TOOL_FLAG = Qt.Tool if IS_WIN else Qt.Widget
+TOOL_FLAG = Qt.Tool if HELPER else Qt.Widget
 
 # can she see where other windows are (to sit on them / peek around them)?
-HAS_WINLIST = HAS_QUARTZ or (IS_WIN and W is not None)
+HAS_WINLIST = HAS_QUARTZ or (HELPER and W is not None)
 
 # ---- EDIT YOUR REMINDERS HERE (24-hour time, "HH:MM") ----
 # A reminder is ("time", "message") and repeats every day.
@@ -154,7 +174,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 2                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 3                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1164,6 +1184,9 @@ class CustomizeDialog(QDialog):
 
         col.addStretch(1)
         done = QPushButton("Done")
+        done.setStyleSheet("QPushButton { padding: 6px 22px; border-radius: 8px; background: #a99be0; "
+                           "color: white; border: 1px solid #6b5f93; font-weight: bold; }"
+                           "QPushButton:hover { background: #9483d6; }")
         done.clicked.connect(self.accept)
         main.addWidget(done, alignment=Qt.AlignRight)
         self.refresh()
@@ -1626,7 +1649,7 @@ def in_sleep_hours():
 
 
 def autostart_enabled():
-    if IS_WIN:
+    if HELPER:
         return W is not None and W.autostart_enabled()
     return os.path.exists(LAUNCH_AGENT)
 
@@ -2040,7 +2063,7 @@ class Pet(QWidget):
             elif cmd[0] == "/usr/bin/open":
                 subprocess.Popen(["/bin/sh", "-c", "sleep 2; open -a '%s'" % cmd[-1]])
             else:
-                subprocess.Popen(cmd)
+                subprocess.Popen(cmd, start_new_session=True)
         except Exception as ex:
             print("restart failed:", ex, file=sys.stderr, flush=True)
         QApplication.quit()
@@ -2250,7 +2273,7 @@ class Pet(QWidget):
 
     # ---------- start at login ----------
     def set_autostart(self, value):
-        if IS_WIN:
+        if HELPER:
             try:
                 cmd = " ".join('"%s"' % c for c in self.launch_command())
                 W.set_autostart(value, cmd)
@@ -2481,8 +2504,7 @@ class Pet(QWidget):
             self.add_toggle(sm, "Always listen for \"Hey Digi\"", self.listen_always,
                             self.set_listen_always)
         else:
-            sm.addAction("Voice: needs setup (run Install DigiPal)" if IS_WIN else
-                         "Voice: needs setup (run Install Digi's Ears)", self.voice_help)
+            sm.addAction("Voice: needs setup (" + INSTALL_HINT.rstrip("~") + ")", self.voice_help)
         sm.addAction("Voice: what can I say?", self.voice_help)
         if self.ears is not None and dv.HAS_VOICE:
             mm = sm.addMenu("Voice: which microphone?")
@@ -2492,8 +2514,8 @@ class Pet(QWidget):
                 mm.addAction("Windows default mic").setEnabled(False)
                 mm.addAction("(change it in Windows Sound settings)").setEnabled(False)
             else:
-                self.add_toggle(mm, "Mac default", self.ears.mic_uid is None,
-                                lambda v: self.pick_mic(None, "Mac default"))
+                self.add_toggle(mm, DEFAULT_MIC, self.ears.mic_uid is None,
+                                lambda v: self.pick_mic(None, DEFAULT_MIC))
             for dev, uid, name in mics:
                 self.add_toggle(mm, name, self.ears.mic_uid == uid,
                                 lambda v, u=uid, n=name: self.pick_mic(u, n))
@@ -2787,8 +2809,8 @@ class Pet(QWidget):
 
     # ---------- stream mode ----------
     def check_obs(self):
-        if IS_WIN:
-            return W is not None and W.running("obs64.exe", "obs32.exe", "obs.exe")
+        if HELPER:
+            return W is not None and W.obs_running()
         try:
             r = subprocess.run(["pgrep", "-f", "OBS.app/Contents/MacOS"],
                                capture_output=True, timeout=3)
@@ -2911,12 +2933,15 @@ class Pet(QWidget):
             lines.append("\u274c Ears not installed. Run \"Install Digi's Ears.command\".")
         else:
             lines.append("\u2705 Ears installed.")
+            if IS_LINUX:
+                lines.append("Linux ears work offline (Vosk). If she can't hear you, check the mic")
+                lines.append("in your sound settings, or pick one under Voice \u2192 Microphone.")
             if IS_WIN:
                 lines.append("Windows needs two settings on (Settings \u2192 Privacy & security):")
                 lines.append("   \u2022 Speech \u2192 Online speech recognition")
                 lines.append("   \u2022 Microphone \u2192 Let desktop apps access your microphone")
             try:
-                if IS_WIN:
+                if not IS_MAC:
                     raise RuntimeError("skip")
                 sp = int(dv.Speech.SFSpeechRecognizer.authorizationStatus())
                 lines.append({0: "\u2753 Speech Recognition: not asked yet (hold-click me to ask)",
@@ -2924,10 +2949,10 @@ class Pet(QWidget):
                               2: "\u274c Speech Recognition: restricted on this Mac",
                               3: "\u2705 Speech Recognition: allowed"}.get(sp, f"Speech: {sp}"))
             except Exception as ex:
-                if not IS_WIN:
+                if IS_MAC:
                     lines.append(f"Speech check failed: {ex}")
             try:
-                if IS_WIN:
+                if not IS_MAC:
                     raise RuntimeError("skip")
                 mic = int(dv.AVFoundation.AVCaptureDevice.authorizationStatusForMediaType_(
                     dv.AVFoundation.AVMediaTypeAudio))
@@ -2936,7 +2961,7 @@ class Pet(QWidget):
                               2: "\u274c Microphone: DENIED (System Settings \u2192 Privacy & Security \u2192 Microphone)",
                               3: "\u2705 Microphone: allowed"}.get(mic, f"Mic: {mic}"))
             except Exception as ex:
-                if not IS_WIN:
+                if IS_MAC:
                     lines.append(f"Mic check failed: {ex}")
             try:
                 rec = self.ears.recognizer
@@ -2965,8 +2990,7 @@ class Pet(QWidget):
         if not self.dragging or self.moved:
             return
         if not dv.HAS_VOICE:
-            self.say("I need my ears first! Run 'Install DigiPal' again~" if IS_WIN else
-                     "I need my ears first! Run 'Install Digi's Ears'~", 4000)
+            self.say("I need my ears first! " + INSTALL_HINT, 4000)
             return
         self.ptt = True
         self.surprised = False
@@ -2982,8 +3006,7 @@ class Pet(QWidget):
         self.ptt_timer.stop()
         self.dragging = False
         if not dv.HAS_VOICE:
-            self.say("I need my ears first! Run 'Install DigiPal' again~" if IS_WIN else
-                     "I need my ears first! Run 'Install Digi's Ears'~", 4000)
+            self.say("I need my ears first! " + INSTALL_HINT, 4000)
             return
         self.tap_talk = self.t
         self.voice_text = ""
@@ -3008,8 +3031,8 @@ class Pet(QWidget):
             self.say("Okay, ears off!", 1800)
 
     def on_ear_status(self, st):
-        if IS_WIN and st in ("missing", "dictation", "mic-denied", "denied"):
-            self.say({"missing": "I need my ears first! Run 'Install DigiPal' again~",
+        if HELPER and st in ("missing", "dictation", "mic-denied", "denied"):
+            self.say({"missing": "I need my ears first! " + INSTALL_HINT,
                       "dictation": "Turn on my ears: Settings \u2192 Privacy & security \u2192 Speech \u2192 "
                                    "Online speech recognition!",
                       "mic-denied": "I can't use the mic~ Settings \u2192 Privacy & security \u2192 Microphone "
@@ -3019,8 +3042,7 @@ class Pet(QWidget):
             self.ptt_waiting = 0
             return
         if st == "missing":
-            self.say("I need my ears first! Run 'Install DigiPal' again~" if IS_WIN else
-                     "I need my ears first! Run 'Install Digi's Ears'~", 4000)
+            self.say("I need my ears first! " + INSTALL_HINT, 4000)
         elif st == "denied":
             self.say("I can't hear you~ Allow Speech & Mic for DigiPal in System Settings.", 6000)
             self.listen_always = False
@@ -3452,8 +3474,8 @@ class Pet(QWidget):
         was = False
         while True:
             try:
-                if IS_WIN:
-                    on = W is not None and W.running("screenclippinghost.exe", "snippingtool.exe")
+                if HELPER:
+                    on = W is not None and W.screenshot_running()
                 else:
                     r = subprocess.run(["pgrep", "-x", "screencaptureui"], capture_output=True, timeout=3)
                     on = r.returncode == 0
@@ -3499,9 +3521,9 @@ class Pet(QWidget):
             if self.fun["camera"]:
                 self.take_photo()
         # typing along: check the keyboard about twice a second (no special permission needed)
-        if (HAS_QUARTZ or (IS_WIN and W)) and self.t % 12 == 0 and self.fun["typing"]:
+        if (HAS_QUARTZ or (HELPER and W)) and self.t % 12 == 0 and self.fun["typing"]:
             try:
-                if IS_WIN:
+                if HELPER:
                     # Windows only says "something was touched": count it as typing when the
                     # mouse hasn't moved since last time
                     cur = QCursor.pos()
@@ -4403,7 +4425,7 @@ class Pet(QWidget):
     # ----- battery -----
     def battery_loop(self):
         while True:
-            if IS_WIN:
+            if HELPER:
                 b = W.battery() if W else None
                 if b and b != (self.batt_pct, self.on_battery):
                     print(time.strftime("%H:%M:%S"), "battery:", b[0], "%",
@@ -4447,7 +4469,7 @@ class Pet(QWidget):
 
     # ----- welcome back -----
     def is_screen_locked(self):
-        if IS_WIN:
+        if HELPER:
             return W is not None and W.screen_locked()
         if not HAS_QUARTZ:
             return False
@@ -4491,12 +4513,10 @@ class Pet(QWidget):
     # ----- steam -----
     def steam_loop(self):
         while True:
-            if IS_WIN:
+            if HELPER:
                 try:
-                    procs = W.processes() if W else []
-                    self.steam_running = any(n == "steam.exe" for n, _ in procs)
-                    self.steam_game = self.steam_running and any(
-                        "\\steamapps\\common\\" in (x or "").lower() for _, x in procs)
+                    if W:
+                        self.steam_running, self.steam_game = W.steam_state()
                 except Exception:
                     pass
                 time.sleep(5)
@@ -4617,7 +4637,7 @@ class Pet(QWidget):
 
     def music_loop(self):
         while True:
-            if IS_WIN:
+            if HELPER:
                 self.music_playing = bool(W.media_playing()) if W else False
                 time.sleep(4)
                 continue
@@ -4655,12 +4675,12 @@ class Pet(QWidget):
 
     # ---------- app reactions ----------
     def check_app(self):
-        if not ((HAS_APPKIT or (IS_WIN and W)) and self.react_enabled):
+        if not ((HAS_APPKIT or (HELPER and W)) and self.react_enabled):
             return
         if self.focus_end or self.sleep_hours:
             return
         try:
-            if IS_WIN:
+            if HELPER:
                 name = W.front_app_name()
             else:
                 name = NSWorkspace.sharedWorkspace().frontmostApplication().localizedName()
@@ -4682,7 +4702,7 @@ class Pet(QWidget):
 
     # ---------- windows ----------
     def get_front_window(self):
-        if IS_WIN:
+        if HELPER:
             if W is None:
                 return None
             # Windows gives real pixels; Qt works in scaled ones (e.g. 150% display scaling)
@@ -5476,9 +5496,27 @@ class Pet(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setApplicationName("DigiPal")
-    if IS_WIN:
+    if HELPER:
         # her windows don't show in the taskbar, so don't quit when a dialog closes
         app.setQuitOnLastWindowClosed(False)
+        # Digi's windows are designed light; in dark mode Windows/Linux would put white text on
+        # her white buttons. So her menus and windows always use a light look.
+        try:
+            app.styleHints().setColorScheme(Qt.ColorScheme.Light)
+        except Exception:
+            pass
+        from PySide6.QtGui import QPalette
+        app.setStyle("Fusion")
+        pal = QPalette()
+        for role, col in ((QPalette.Window, "#f7f5fb"), (QPalette.WindowText, "#2b2540"),
+                          (QPalette.Base, "#ffffff"), (QPalette.AlternateBase, "#f1edf9"),
+                          (QPalette.Text, "#2b2540"), (QPalette.Button, "#ffffff"),
+                          (QPalette.ButtonText, "#3a3159"), (QPalette.ToolTipBase, "#ffffff"),
+                          (QPalette.ToolTipText, "#2b2540"), (QPalette.Highlight, "#a99be0"),
+                          (QPalette.HighlightedText, "#ffffff"), (QPalette.PlaceholderText, "#9a93b0")):
+            pal.setColor(role, QColor(col))
+        app.setPalette(pal)
+    if IS_WIN:
         try:
             import ctypes
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("DigiPal.Digi")
