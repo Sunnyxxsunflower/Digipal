@@ -175,7 +175,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 6                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 7                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1103,6 +1103,23 @@ class CustomizeDialog(QDialog):
         col = QVBoxLayout()
         outer.addLayout(col)
 
+        # outline: a soft glow around her so she doesn't vanish on dark windows (first, so it's easy to find)
+        col.addWidget(self.heading("Glow outline"))
+        row = QHBoxLayout()
+        self.outline_buttons = {}
+        for key, label in (("glow", "Glow \u2728"), ("off", "Off")):
+            b = self.option(label)
+            b.clicked.connect(lambda *a, k=key: self.pick_outline(k))
+            self.outline_buttons[key] = b
+            row.addWidget(b)
+        tip = QLabel("Glow so I don't get lost in dark mode!")
+        tip.setStyleSheet("background: white; color: #4b3f7a; border: 1px solid #c9bfe3; "
+                          "border-radius: 10px; padding: 4px 10px; font-size: 12px;")
+        row.addSpacing(6)
+        row.addWidget(tip)
+        row.addStretch(1)
+        col.addLayout(row)
+
         # hair style
         col.addWidget(self.heading("Hair style"))
         hg = QGridLayout()
@@ -1122,18 +1139,6 @@ class CustomizeDialog(QDialog):
             b = self.option(label)
             b.clicked.connect(lambda *a, k=key: self.pick_bottom(k))
             self.bottom_buttons[key] = b
-            row.addWidget(b)
-        row.addStretch(1)
-        col.addLayout(row)
-
-        # outline: a soft glow around her so she doesn't vanish on dark windows
-        col.addWidget(self.heading("Outline"))
-        row = QHBoxLayout()
-        self.outline_buttons = {}
-        for key, label in (("glow", "Glow"), ("off", "Off")):
-            b = self.option(label)
-            b.clicked.connect(lambda *a, k=key: self.pick_outline(k))
-            self.outline_buttons[key] = b
             row.addWidget(b)
         row.addStretch(1)
         col.addLayout(row)
@@ -1451,6 +1456,8 @@ class CustomizeDialog(QDialog):
         self.pet.outline = k
         self.pet.save_custom()
         self.pet.update()
+        self.pet.say("Glow on, so I don't get lost in dark mode! \u2728" if k == "glow"
+                     else "No glow~ I'll try not to get lost!", 2500)
         self.refresh()
 
     def pick_textsize(self, k):
@@ -1827,6 +1834,7 @@ class Pet(QWidget):
         self.apply_personal(PERSONAL)     # someone's own starting setup, if there is one
         self.text_size = "medium"
         self.outline = "glow"             # soft white outline so she shows up on dark windows
+        self.glow_told = False            # has she explained her glow yet?
         self.bottom = "skirt"
         self.bottom_cache = {}           # {bottom: {state: [QPixmap or None]}} for the one she wears
         self.tint_cache = {}
@@ -2136,6 +2144,13 @@ class Pet(QWidget):
             lines.append("Happy Monday! We've got this!")
         self.happy = 40
         self.say(random.choice(lines), 4000)
+        if self.outline == "glow" and not self.glow_told:
+            # once: explain the new glow (and where to turn it off)
+            self.glow_told = True
+            self.save_custom()
+            QTimer.singleShot(4500, lambda: self.say(
+                "See my glow? \u2728 It's so I don't get lost in dark mode! "
+                "(You can turn it off in Customize)", 6000))
 
     # ---------- your own art ----------
     def load_art(self):
@@ -4342,7 +4357,8 @@ class Pet(QWidget):
                 json.dump({"hair": self.hair_color, "outfit": self.acc_mode,
                            "style": self.outfit_style, "hairstyle": self.hairstyle,
                            "bottom": self.bottom, "bubble": self.bubble_mode, "nickname": self.nickname,
-                           "text_size": self.text_size, "outline": self.outline, "place": self.place, "units": self.units,
+                           "text_size": self.text_size, "outline": self.outline,
+                           "glow_told": self.glow_told, "place": self.place, "units": self.units,
                            "dnd_days": self.dnd_days, "sleep_hours": self.sleep_hours_set}, f)
         except Exception:
             pass
@@ -4386,6 +4402,7 @@ class Pet(QWidget):
                 self.bubble_mode = d["bubble"]
             if d.get("outline") in ("glow", "off"):
                 self.outline = d["outline"]
+            self.glow_told = bool(d.get("glow_told", False))
             if d.get("text_size") in ("small", "medium", "large"):
                 self.text_size = d["text_size"]
         except Exception:
