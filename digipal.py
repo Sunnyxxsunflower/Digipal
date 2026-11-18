@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QTimeEdit, QCheckBox, QMessageBox, QGridLayout,
                                QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
                                QScrollArea, QComboBox, QSpinBox)
-from PySide6.QtCore import QTime
+from PySide6.QtCore import QTime, QRect
 
 IS_WIN = sys.platform == "win32"
 IS_LINUX = sys.platform.startswith("linux")
@@ -177,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 8                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 9                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1204,6 +1204,22 @@ class CustomizeDialog(QDialog):
             b.clicked.connect(lambda *a, k=key: self.pick_bubble(k))
             self.bubble_buttons[key] = b
             row.addWidget(b)
+        row.addSpacing(10)
+        self.shape_buttons = {}
+        for key, label in (("speech", "Speech \U0001F4AC"), ("thought", "Thought \U0001F4AD")):
+            b = self.option(label)
+            b.clicked.connect(lambda *a, k=key: self.pick_bubble_shape(k))
+            self.shape_buttons[key] = b
+            row.addWidget(b)
+        row.addStretch(1)
+        col.addLayout(row)
+        row = QHBoxLayout()
+        self.spot_buttons = {}
+        for key, label in (("above", "Above her head"), ("side", "Next to her")):
+            b = self.option(label)
+            b.clicked.connect(lambda *a, k=key: self.pick_bubble_pos(k))
+            self.spot_buttons[key] = b
+            row.addWidget(b)
         row.addStretch(1)
         col.addLayout(row)
         row = QHBoxLayout()
@@ -1489,6 +1505,10 @@ class CustomizeDialog(QDialog):
             b.setChecked(k == pet.hairstyle)
         for k, b in self.bubble_buttons.items():
             b.setChecked(k == pet.bubble_mode)
+        for k, b in self.shape_buttons.items():
+            b.setChecked(k == pet.bubble_shape)
+        for k, b in self.spot_buttons.items():
+            b.setChecked(k == pet.bubble_pos)
         for k, b in self.outline_buttons.items():
             b.setChecked(k == pet.outline)
         for k, b in self.unit_buttons.items():
@@ -1528,6 +1548,18 @@ class CustomizeDialog(QDialog):
             return
         self.pet.my_birthday = new
         self.pet.save_custom()
+
+    def pick_bubble_shape(self, k):
+        self.pet.bubble_shape = k
+        self.pet.save_custom()
+        self.pet.say("Hmm... I'm thinking~" if k == "thought" else "Back to talking!", 2500)
+        self.refresh()
+
+    def pick_bubble_pos(self, k):
+        self.pet.bubble_pos = k
+        self.pet.save_custom()
+        self.pet.say("Over here now! Is this better?" if k == "side" else "Up here~", 2500)
+        self.refresh()
 
     def pick_name(self):
         name = self.name_box.text().strip()
@@ -1929,6 +1961,197 @@ class LazyPix:
             yield self[i]
 
 
+class BubbleWin(QWidget):
+    """Her speech / thought bubble, in its own see-through window so it can sit above her head
+    or beside her without covering her (and without making her own window bigger)."""
+    PAD = 8           # room around the bubble for its outline
+    TAIL = 22         # room for the tail / little thought circles
+
+    def __init__(self, pet):
+        super().__init__(None)
+        self.pet = pet
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.key = None
+        self.layout_ = None
+        self.side = "above"           # where it actually is right now: above / right / left
+        self.resize(10, 10)
+
+    # ---- where it goes
+    def follow(self):
+        pet = self.pet
+        text = pet.msg
+        if not text or not pet.isVisible() or getattr(pet, "hidden_for_shot", False):
+            if self.isVisible():
+                self.hide()
+            return
+        want = getattr(pet, "bubble_pos", "above")
+        area = pet.screen().availableGeometry() if pet.screen() else pet.area
+        side = want
+        if want == "above":
+            lay = self.measure(text, "above")
+            top = pet.y() + 26 - lay["h"]
+            if top < area.top():
+                side = "side"                      # no room above (top of the screen): go beside
+        if side == "side":
+            lay = self.measure(text, "side")
+            right_x = pet.x() + 196
+            side = "right" if right_x + lay["w"] <= area.right() else "left"
+        else:
+            side = "above"
+        key = (text, side, pet.bubble_shape, pet.bubble_mode, pet.text_size)
+        if key != self.key:
+            self.key = key
+            self.layout_ = self.measure(text, "above" if side == "above" else "side")
+            self.side = side
+            self.resize(self.layout_["w"], self.layout_["h"])
+            self.update()
+        w, h = self.layout_["w"], self.layout_["h"]
+        if side == "above":
+            x = pet.x() + 110 - w // 2
+            y = pet.y() + 26 - h
+        elif side == "right":
+            x = pet.x() + 188
+            y = pet.y() + 70 - h // 2
+        else:
+            x = pet.x() + 32 - w
+            y = pet.y() + 70 - h // 2
+        x = max(area.left(), min(area.right() - w, x))
+        y = max(area.top(), min(area.bottom() - h, y))
+        if (self.x(), self.y()) != (x, y):
+            self.move(x, y)
+        if not self.isVisible():
+            self.show()
+            self.raise_()
+
+    def measure(self, text, where):
+        """Bubble size for this text. Above: wide and short. Beside: narrow and tall."""
+        size = {"small": 9, "medium": 11, "large": 14}.get(getattr(self.pet, "text_size", "medium"), 11)
+        thought = getattr(self.pet, "bubble_shape", "speech") == "thought"
+        inner_w = 196 if where == "above" else 112
+        max_h = 120 if where == "above" else 260
+        flags = 0
+        for fl in (Qt.AlignCenter, Qt.TextWordWrap):
+            flags |= fl.value if hasattr(fl, "value") else int(fl)
+        while True:
+            f = QFont("Helvetica", size)
+            r = QFontMetrics(f).boundingRect(QRect(0, 0, inner_w, 2000), flags, text)
+            if r.height() <= max_h or size <= 8:
+                break
+            size -= 1
+        th = max(r.height(), 20)
+        bw = inner_w + 24
+        bh = th + (26 if thought else 18)
+        if where == "side":
+            bh = max(bh, 70)
+        if thought:                        # the bumpy edge needs a little more room
+            bw += 16
+            bh += 10
+        P, T = self.PAD, self.TAIL
+        if where == "above":
+            w, h = bw + 2 * P, bh + 2 * P + T
+        else:
+            w, h = bw + 2 * P + T, bh + 2 * P
+        return {"w": int(w), "h": int(h), "bw": bw, "bh": bh, "font": f}
+
+    # ---- drawing
+    def cloud(self, rect):
+        """A thought-bubble cloud: a rounded box with bumps all around its edge."""
+        path = QPainterPath()
+        path.addRoundedRect(rect.adjusted(6, 6, -6, -6), 14, 14)
+        r = 13.0
+        def bumps(x0, y0, x1, y1):
+            n = max(2, int(math.hypot(x1 - x0, y1 - y0) / (r * 1.45)))
+            for i in range(n + 1):
+                t = i / n
+                cx, cy = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+                path.addEllipse(QPointF(cx, cy), r, r)
+        L, T_, R, B = rect.left() + r, rect.top() + r, rect.right() - r, rect.bottom() - r
+        bumps(L, T_, R, T_)
+        bumps(R, T_, R, B)
+        bumps(R, B, L, B)
+        bumps(L, B, L, T_)
+        return path.simplified()
+
+    def paintEvent(self, event):
+        lay = self.layout_
+        pet = self.pet
+        if not lay or not pet.msg:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        dark = getattr(pet, "bubble_mode", "light") == "dark"
+        edge = QColor("#8a8a94") if dark else OUTLINE
+        fill = QColor("#111114") if dark else QColor("white")
+        P, T = self.PAD, self.TAIL
+        bw, bh = lay["bw"], lay["bh"]
+        if self.side == "above":
+            box = QRectF(P, P, bw, bh)
+        elif self.side == "right":
+            box = QRectF(P + T, P, bw, bh)
+        else:
+            box = QRectF(P, P, bw, bh)
+        thought = getattr(pet, "bubble_shape", "speech") == "thought"
+        pen = QPen(edge, 3)
+        pen.setJoinStyle(Qt.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(QBrush(fill))
+        if thought:
+            body = self.cloud(box)
+            # little circles trailing toward her head
+            if self.side == "above":
+                tip = QPointF(box.center().x() + 8, box.bottom())
+                dots = [(tip + QPointF(-4, 9), 6), (tip + QPointF(-10, 19), 3.8)]
+            elif self.side == "right":
+                tip = QPointF(box.left(), box.center().y() + 6)
+                dots = [(tip + QPointF(-8, 6), 5.5), (tip + QPointF(-17, 12), 3.5)]
+            else:
+                tip = QPointF(box.right(), box.center().y() + 6)
+                dots = [(tip + QPointF(8, 6), 5.5), (tip + QPointF(17, 12), 3.5)]
+            p.drawPath(body)
+            for c, rr in dots:
+                p.drawEllipse(c, rr, rr)
+        else:
+            body = QPainterPath()
+            body.addRoundedRect(box, 12, 12)
+            tail = QPainterPath()
+            if self.side == "above":
+                cx = box.center().x()
+                tail.moveTo(cx - 10, box.bottom() - 2)
+                tail.lineTo(cx + 2, box.bottom() + T - 4)
+                tail.lineTo(cx + 12, box.bottom() - 2)
+            elif self.side == "right":
+                cy = box.center().y()
+                tail.moveTo(box.left() + 2, cy - 9)
+                tail.lineTo(box.left() - T + 4, cy + 4)
+                tail.lineTo(box.left() + 2, cy + 9)
+            else:
+                cy = box.center().y()
+                tail.moveTo(box.right() - 2, cy - 9)
+                tail.lineTo(box.right() + T - 4, cy + 4)
+                tail.lineTo(box.right() - 2, cy + 9)
+            tail.closeSubpath()
+            p.drawPath(body.united(tail).simplified())
+        p.setPen(QPen(QColor("white") if dark else QColor("black")))
+        p.setFont(lay["font"])
+        opt = QTextOption(Qt.AlignCenter)
+        opt.setWrapMode(QTextOption.WordWrap)
+        p.drawText(box.adjusted(12, 8, -12, -8), pet.msg, opt)
+        p.end()
+
+    def mousePressEvent(self, e):
+        # clicking the bubble: a reminder asks "got it / snooze", anything else just closes it
+        pet = self.pet
+        if pet.reminder_active:
+            pet.reminder_menu(e.globalPosition().toPoint())
+        else:
+            pet.msg = None
+            pet.msg_ticks = 0
+            self.hide()
+
+
 class Pet(QWidget):
     def __init__(self):
         super().__init__()
@@ -2023,6 +2246,9 @@ class Pet(QWidget):
         self.hair_color = None           # None = her original rendered hair
         self.hairstyle = "twintails"
         self.bubble_mode = "light"
+        self.bubble_shape = "speech"      # speech or thought
+        self.bubble_pos = "above"         # above her head, or beside her (tall and narrow)
+        self.bubble_win = None
         self.nickname = ""                # what she calls you (empty = no name)
         self.place = None                 # {"name", "lat", "lon"} for the weather
         self.units = "F"
@@ -4566,7 +4792,8 @@ class Pet(QWidget):
             with open(CUSTOM_FILE, "w") as f:
                 json.dump({"hair": self.hair_color, "outfit": self.acc_mode,
                            "style": self.outfit_style, "hairstyle": self.hairstyle,
-                           "bottom": self.bottom, "bubble": self.bubble_mode, "nickname": self.nickname,
+                           "bottom": self.bottom, "bubble": self.bubble_mode,
+                           "bubble_shape": self.bubble_shape, "bubble_pos": self.bubble_pos, "nickname": self.nickname,
                            "text_size": self.text_size, "outline": self.outline,
                            "glow_told": self.glow_told, "place": self.place, "units": self.units,
                            "dnd_days": self.dnd_days, "sleep_hours": self.sleep_hours_set,
@@ -4617,6 +4844,10 @@ class Pet(QWidget):
             self.apply_personal(d)
             if d.get("bubble") in ("light", "dark"):
                 self.bubble_mode = d["bubble"]
+            if d.get("bubble_shape") in ("speech", "thought"):
+                self.bubble_shape = d["bubble_shape"]
+            if d.get("bubble_pos") in ("above", "side"):
+                self.bubble_pos = d["bubble_pos"]
             if d.get("outline") in ("glow", "off"):
                 self.outline = d["outline"]
             self.glow_told = bool(d.get("glow_told", False))
@@ -5435,6 +5666,12 @@ class Pet(QWidget):
 
     def tick(self):
         self.t += 1
+        try:
+            if self.bubble_win is None:
+                self.bubble_win = BubbleWin(self)
+            self.bubble_win.follow()
+        except Exception as ex:
+            print("bubble:", ex, file=sys.stderr, flush=True)
 
         if self.happy > 0:
             self.happy -= 1
@@ -5914,35 +6151,7 @@ class Pet(QWidget):
             center = QTextOption(Qt.AlignCenter)
             p.drawText(QRectF(55, 224, 110, 15), label, center)
 
-        # speech bubble
-        if self.msg:
-            dark = getattr(self, "bubble_mode", "light") == "dark"
-            # dark mode: black bubble, white text, with a soft gray edge so it still shows up
-            # on a dark desktop
-            p.setPen(QPen(QColor("#8a8a94") if dark else OUTLINE, 3))
-            p.setBrush(QBrush(QColor("#111114") if dark else QColor("white")))
-            p.drawRoundedRect(QRectF(15, 6, 190, 56), 10, 10)
-            p.setPen(QPen(QColor("white") if dark else QColor("black")))
-            # the size she picked; a long message shrinks a little so it still fits the bubble
-            size = {"small": 9, "medium": 11, "large": 14}.get(getattr(self, "text_size", "medium"), 11)
-            box = QRectF(22, 8, 176, 52)
-            f = QFont("Helvetica", size)
-            try:
-                flags = 0
-                for fl in (Qt.AlignCenter, Qt.TextWordWrap):
-                    flags |= fl.value if hasattr(fl, "value") else int(fl)
-                while size > 8:
-                    need = QFontMetrics(f).boundingRect(box.toRect(), flags, self.msg)
-                    if need.height() <= box.height() and need.width() <= box.width():
-                        break
-                    size -= 1
-                    f = QFont("Helvetica", size)
-            except Exception:
-                f = QFont("Helvetica", 11)
-            p.setFont(f)
-            opt = QTextOption(Qt.AlignCenter)
-            opt.setWrapMode(QTextOption.WordWrap)
-            p.drawText(box, self.msg, opt)
+        # (her speech bubble is its own window now: BubbleWin)
 
         p.end()
 
