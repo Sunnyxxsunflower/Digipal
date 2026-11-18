@@ -177,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 11                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 12                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1231,7 +1231,7 @@ class CustomizeDialog(QDialog):
             pl.setContentsMargins(4, 0, 4, 0)
             pl.setSpacing(4)
             self.phone_title = QLabel("Customize Digi")
-            self.phone_title.setStyleSheet("font-size: 17px; font-weight: bold; color: #3d4f75;")
+            self.phone_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #3d4f75;")
             pl.addWidget(self.phone_title)
             self.pages = QStackedWidget()
             self.pages.addWidget(look_scroll)
@@ -1405,14 +1405,21 @@ class CustomizeDialog(QDialog):
         if self.in_room:
             self.setStyleSheet(self.styleSheet() + """
                 QDialog { background: #e1ebdf; }
-                QLabel#h { color: #3d4f75; }
-                QPushButton[class="opt"] { padding: 4px 8px; border-color: #b8c5dc; font-size: 12px; }
+                QLabel#h { color: #3d4f75; font-size: 12px; margin-top: 3px; }
+                QDialog QLabel { font-size: 11px; }
+                QPushButton[class="opt"] { padding: 2px 6px; border-radius: 7px; border-color: #b8c5dc;
+                                           font-size: 11px; }
+                QPushButton[class="sw"] { border-radius: 11px; min-width: 22px; max-width: 22px;
+                                          min-height: 22px; max-height: 22px; }
+                QPushButton[class="sw"]:checked { border: 2px solid #1b1b1b; }
+                QComboBox, QSpinBox, QLineEdit, QTimeEdit { font-size: 11px; }
+                QCheckBox { font-size: 11px; color: #3d4f75; }
                 QPushButton[class="opt"]:hover { background: #eef2f9; }
                 QPushButton[class="opt"]:checked { background: #7389b0; border-color: #4e6590; color: white; }
-                QPushButton[class="dock"] { padding: 6px 4px; border-radius: 10px; border: 1px solid #b8c5dc;
+                QPushButton[class="dock"] { padding: 4px 4px; font-size: 12px; border-radius: 10px; border: 1px solid #b8c5dc;
                                             background: #f3f6fb; color: #3d4f75; font-weight: bold; }
                 QPushButton[class="dock"]:checked { background: #dfe7f4; border-color: #7389b0; }
-                QPushButton[class="done"] { padding: 6px 4px; border-radius: 10px; border: 1px solid #4e6590;
+                QPushButton[class="done"] { padding: 4px 4px; font-size: 12px; border-radius: 10px; border: 1px solid #4e6590;
                                             background: #7389b0; color: white; font-weight: bold; }
                 QPushButton[class="done"]:hover { background: #637aa3; }
             """)
