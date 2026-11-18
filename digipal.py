@@ -177,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 9                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 10                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -2073,6 +2073,9 @@ class BubbleWin(QWidget):
         bumps(R, T_, R, B)
         bumps(R, B, L, B)
         bumps(L, B, L, T_)
+        # overlapping bumps must ADD up (winding), or the default odd-even rule punches holes
+        # where they overlap and every circle's outline shows inside the bubble
+        path.setFillRule(Qt.WindingFill)
         return path.simplified()
 
     def paintEvent(self, event):
