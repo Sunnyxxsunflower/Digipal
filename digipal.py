@@ -174,7 +174,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 3                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 4                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1117,6 +1117,18 @@ class CustomizeDialog(QDialog):
         row.addStretch(1)
         col.addLayout(row)
 
+        # outline: a soft glow around her so she doesn't vanish on dark windows
+        col.addWidget(self.heading("Outline"))
+        row = QHBoxLayout()
+        self.outline_buttons = {}
+        for key, label in (("glow", "Glow"), ("off", "Off")):
+            b = self.option(label)
+            b.clicked.connect(lambda *a, k=key: self.pick_outline(k))
+            self.outline_buttons[key] = b
+            row.addWidget(b)
+        row.addStretch(1)
+        col.addLayout(row)
+
         # speech bubble: light (white bubble, black text) or dark (black bubble, white text)
         col.addWidget(self.heading("Speech bubble"))
         row = QHBoxLayout()
@@ -1377,6 +1389,8 @@ class CustomizeDialog(QDialog):
             b.setChecked(k == pet.hairstyle)
         for k, b in self.bubble_buttons.items():
             b.setChecked(k == pet.bubble_mode)
+        for k, b in self.outline_buttons.items():
+            b.setChecked(k == pet.outline)
         for k, b in self.unit_buttons.items():
             b.setChecked(k == pet.units)
         for k, b in self.day_buttons.items():
@@ -1414,6 +1428,12 @@ class CustomizeDialog(QDialog):
         self.pet.save_custom()
         self.pet.say(f"Okay, {name}! \u2665" if name else "Okay~ no names!", 2500)
         self.pet.happy = 20
+
+    def pick_outline(self, k):
+        self.pet.outline = k
+        self.pet.save_custom()
+        self.pet.update()
+        self.refresh()
 
     def pick_textsize(self, k):
         self.pet.text_size = k
@@ -1788,6 +1808,7 @@ class Pet(QWidget):
         self.sleep_hours_set = list(SLEEP_HOURS)
         self.apply_personal(PERSONAL)     # someone's own starting setup, if there is one
         self.text_size = "medium"
+        self.outline = "glow"             # soft white outline so she shows up on dark windows
         self.bottom = "skirt"
         self.bottom_cache = {}           # {bottom: {state: [QPixmap or None]}} for the one she wears
         self.tint_cache = {}
@@ -4167,9 +4188,63 @@ class Pet(QWidget):
             self.say(f"New look! {name} \u2728", 2000)
         self.happy = 15
 
+    def glow_for(self, target, pm, hl, bl):
+        """A soft white outline around her whole shape (so she shows up on dark windows).
+        Made at the size she's drawn and remembered per frame."""
+        w, h = max(1, int(round(target.width()))), max(1, int(round(target.height())))
+        key = (pm.cacheKey(), hl.cacheKey() if hl is not None else 0,
+               bl.cacheKey() if bl is not None else 0, w, h)
+        cache = getattr(self, "glow_cache", None)
+        if cache is None:
+            cache = self.glow_cache = {}
+        g = cache.get(key)
+        if g is not None:
+            return g
+        from PySide6.QtGui import QImage
+        # 1. her silhouette (frame + bottoms + hair) at the size she's drawn
+        sil = QImage(w, h, QImage.Format_ARGB32_Premultiplied)
+        sil.fill(Qt.transparent)
+        q = QPainter(sil)
+        q.setRenderHint(QPainter.SmoothPixmapTransform)
+        full = QRectF(0, 0, w, h)
+        q.drawPixmap(full, pm, QRectF(pm.rect()))
+        for lay in (bl, hl):
+            if lay is not None and not lay.isNull():
+                hh = h * lay.height() / pm.height()
+                q.drawPixmap(QRectF(0, h - hh, w, hh), lay, QRectF(lay.rect()))
+        q.end()
+        # 2. spread it out a few pixels in every direction, then paint that white
+        out = QImage(w, h, QImage.Format_ARGB32_Premultiplied)
+        out.fill(Qt.transparent)
+        q = QPainter(out)
+        for rad, alpha in ((2.6, 0.45), (1.4, 1.0)):
+            q.setOpacity(alpha)
+            for i in range(16):
+                a = 2 * math.pi * i / 16
+                q.drawImage(QPointF(rad * math.cos(a), rad * math.sin(a)), sil)
+        q.setOpacity(1.0)
+        q.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        q.fillRect(out.rect(), QColor(255, 255, 255, 215))
+        q.end()
+        g = QPixmap.fromImage(out)
+        if len(cache) > 300:
+            cache.clear()
+        cache[key] = g
+        return g
+
     def draw_layers(self, p, target, pm, hl, bl):
         """Her frame, her skirt or shorts, then her hair on top (tinted if a color is picked).
         (Older frames had the hair built in, so then only the tint goes on, under the bottoms.)"""
+        if getattr(self, "outline", "glow") == "glow":
+            try:
+                hl2 = hl
+                if hl is not None and self.hair_color and not hl.isNull():
+                    hl2 = self.tinted(hl)
+                p.drawPixmap(target, self.glow_for(target, pm, hl2 if self.layered_hair() else None, bl),
+                             QRectF(0, 0, round(target.width()), round(target.height())))
+            except Exception as ex:
+                print("glow failed:", ex, file=sys.stderr, flush=True)
+                self.outline = "off"
         p.drawPixmap(target, pm, QRectF(pm.rect()))
         if bl is not None and not bl.isNull() and bl.height() != pm.height():
             # skirt/shorts layers are made with the normal camera; outfit frames have extra room
@@ -4247,7 +4322,7 @@ class Pet(QWidget):
                 json.dump({"hair": self.hair_color, "outfit": self.acc_mode,
                            "style": self.outfit_style, "hairstyle": self.hairstyle,
                            "bottom": self.bottom, "bubble": self.bubble_mode, "nickname": self.nickname,
-                           "text_size": self.text_size, "place": self.place, "units": self.units,
+                           "text_size": self.text_size, "outline": self.outline, "place": self.place, "units": self.units,
                            "dnd_days": self.dnd_days, "sleep_hours": self.sleep_hours_set}, f)
         except Exception:
             pass
@@ -4289,6 +4364,8 @@ class Pet(QWidget):
             self.apply_personal(d)
             if d.get("bubble") in ("light", "dark"):
                 self.bubble_mode = d["bubble"]
+            if d.get("outline") in ("glow", "off"):
+                self.outline = d["outline"]
             if d.get("text_size") in ("small", "medium", "large"):
                 self.text_size = d["text_size"]
         except Exception:
