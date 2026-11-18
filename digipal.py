@@ -1987,7 +1987,8 @@ class Pet(QWidget):
                 for rel in info.get("files", []):
                     if ".." in rel or rel.startswith(("/", "\\")):
                         continue
-                    data = self.fetch(UPDATE_RAW + rel.replace("\\", "/"), timeout=60)
+                    import urllib.parse
+                    data = self.fetch(UPDATE_RAW + urllib.parse.quote(rel.replace("\\", "/")), timeout=60)
                     dst = os.path.join(tmp, rel)
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     with open(dst, "wb") as f:
