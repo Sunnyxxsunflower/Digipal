@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QDialog, QVBoxLayout, QHBoxLayout, QListWidget,
                                QListWidgetItem, QPushButton, QLabel, QLineEdit,
                                QTimeEdit, QCheckBox, QMessageBox, QGridLayout,
-                               QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget)
+                               QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
+                               QScrollArea)
 from PySide6.QtCore import QTime
 
 IS_WIN = sys.platform == "win32"
@@ -174,7 +175,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 5                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 6                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1082,7 +1083,15 @@ class CustomizeDialog(QDialog):
                            "QTabWidget::pane { border: none; }")
         main.addWidget(tabs)
         look = QWidget()
-        tabs.addTab(look, "Look")
+        # small laptop screens: let the Look tab scroll instead of squishing rows on top of each other
+        look_scroll = QScrollArea()
+        look_scroll.setWidgetResizable(True)
+        look_scroll.setFrameShape(QFrame.NoFrame)
+        look_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        look_scroll.setStyleSheet("QScrollArea { background: transparent; } "
+                                  "QScrollArea > QWidget > QWidget { background: #f6f3fb; }")
+        look_scroll.setWidget(look)
+        tabs.addTab(look_scroll, "Look")
         tabs.addTab(self.build_personal(), "Personal settings")
         outer = QHBoxLayout(look)
         # live preview on the left
@@ -1202,6 +1211,15 @@ class CustomizeDialog(QDialog):
         done.clicked.connect(self.accept)
         main.addWidget(done, alignment=Qt.AlignRight)
         self.refresh()
+        # as big as everything needs, but never taller than the screen (then the Look tab scrolls)
+        try:
+            want = look.sizeHint()
+            scr = (pet.screen() if pet is not None else None) or QApplication.primaryScreen()
+            avail = scr.availableGeometry()
+            self.resize(min(want.width() + 60, avail.width() - 40),
+                        min(want.height() + 110, avail.height() - 60))
+        except Exception as ex:
+            print("customize size:", ex, file=sys.stderr, flush=True)
 
     # ---------- the Personal settings tab ----------
     BOX_STYLE = ("QLineEdit, QTimeEdit { padding: 5px 8px; border-radius: 8px; border: 1px solid #c9bfe3; "
