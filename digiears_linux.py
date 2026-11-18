@@ -104,6 +104,7 @@ class Ears(QObject):
             return
         self.stop(quiet=True)
         self.mode = mode
+        self.started_at = time.time()      # counts from the request, so Digi doesn't restart a start in progress
         self._gen += 1
         self.buffers = 0
         self.last_heard = ""

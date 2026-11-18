@@ -57,6 +57,7 @@ class Ears(QObject):
     heard = Signal(str, bool)          # text, is_final
     status = Signal(str)               # "listening", "stopped", "missing", "dictation", "mic-denied", "error: ..."
     _done = Signal()                   # recognition finished
+    _retry = Signal(str)               # a start failed for a passing reason: try again shortly
     want_always = False
 
     def __init__(self):
@@ -73,6 +74,8 @@ class Ears(QObject):
         self._committed = ""
         self._hyp = ""
         self._done.connect(self._finished)
+        self._retry.connect(self._retry_later)
+        self.retries = 0
         if not HAS_VOICE:
             log("speech packages missing:", _IMPORT_ERROR)
 
@@ -83,6 +86,7 @@ class Ears(QObject):
             return
         self.stop(quiet=True)
         self.mode = mode
+        self.started_at = time.time()      # counts from the request, so Digi doesn't restart a start in progress
         self._gen += 1
         self._committed = self._hyp = ""
         self.buffers = 0
@@ -108,11 +112,19 @@ class Ears(QObject):
             sess.add_completed(lambda s, a: self._on_completed(gen, a))
             self.recognizer = rec
             await sess.start_async()
+            if gen != self._gen:
+                return                          # stopped/restarted while starting: the new start wins
             self.started_at = time.time()
+            self.retries = 0
             log("listening (", self.mode, ")")
             self.status.emit("listening")
         except Exception as ex:
             msg = str(ex)
+            if gen != self._gen:
+                # this start was replaced by a newer one (and its recognizer closed under it):
+                # not a real problem, so stay quiet
+                log("old start cancelled:", msg)
+                return
             log("couldn't start listening:", msg)
             self.last_error = msg
             low = msg.lower()
@@ -120,10 +132,19 @@ class Ears(QObject):
                 self.status.emit("dictation")       # online speech recognition is off
             elif "access" in low or "80070005" in low:
                 self.status.emit("mic-denied")
+            elif self.mode == "always" and self.retries < 3:
+                self.retries += 1
+                self._retry.emit(msg)           # e.g. "object has been closed": just try again
+                return
             else:
                 self.status.emit("error: " + msg[:60])
             if gen == self._gen:
                 self.mode = None
+
+    def _retry_later(self, msg):
+        log(f"retrying ({self.retries}/3) after:", msg)
+        QTimer.singleShot(1500 * self.retries, lambda: self.start("always")
+                          if self.want_always and self.mode == "always" else None)
 
     def _text(self):
         return (self._committed + " " + self._hyp).strip()

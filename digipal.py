@@ -177,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 16                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 17                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -3825,7 +3825,8 @@ class Pet(QWidget):
             self.ears.stop(quiet=True)
             self.ptt_waiting = 0
         elif st.startswith("error"):
-            self.say("My ears glitched! " + st[6:][:40], 4000)
+            print("ears error:", st, file=sys.stderr, flush=True)       # full details in digipal.log
+            self.say("My ears glitched~ Try turning listening off and on again!", 5000)
 
     def on_heard(self, text, final):
         if final and not text.strip():
