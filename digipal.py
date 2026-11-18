@@ -13,13 +13,13 @@ from datetime import datetime, date
 from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, QRect
 from PySide6.QtGui import (QFontMetrics, QPainter, QColor, QPen, QBrush, QPolygonF,
                            QFont, QGuiApplication, QTextOption, QCursor,
-                           QRegion, QPixmap)
+                           QRegion, QPixmap, QPainterPath)
 from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QDialog, QVBoxLayout, QHBoxLayout, QListWidget,
                                QListWidgetItem, QPushButton, QLabel, QLineEdit,
                                QTimeEdit, QCheckBox, QMessageBox, QGridLayout,
                                QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
-                               QScrollArea)
+                               QScrollArea, QComboBox, QSpinBox)
 from PySide6.QtCore import QTime
 
 IS_WIN = sys.platform == "win32"
@@ -156,12 +156,14 @@ SLEEPY_POKE_LINES = ["Mmm... five more minutes~", "Zzz... huh?", "Mm? Oh, hi~"]
 IDLE_LINES = ["...", "Keep going!", "I'm here!", "Snack time?", "Stretch your shoulders!"]
 SING_LINES = ["la la la~", "lalala~", "la la~ la la~", "~la la la~", "lala~"]
 
-ACC_MODES = ["auto", "santa", "witch", "ears", "flower", "scarf", "none"]
+ACC_MODES = ["auto", "santa", "witch", "party", "heart", "ears", "flower", "scarf", "none"]
 ACC_NAMES = {"auto": "Outfit: seasonal", "santa": "Santa hat!", "witch": "Witch hat! \U0001F383",
+             "party": "Party hat! \U0001F389", "heart": "Heart clip! \u2665",
              "ears": "Cat ears! Nya~", "flower": "A little flower!", "scarf": "Cozy scarf!",
              "none": "No outfit"}
 ACC_MENU = [("auto", "Seasonal (changes by month)"), ("santa", "Santa hat"),
-            ("witch", "Witch hat"), ("ears", "Cat ears"), ("flower", "Flower"),
+            ("witch", "Witch hat"), ("party", "Party hat"), ("heart", "Heart clip"),
+            ("ears", "Cat ears"), ("flower", "Flower"),
             ("scarf", "Scarf"), ("none", "Nothing")]
 
 SPEED = 2.0
@@ -175,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 7                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 8                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -190,6 +192,49 @@ SIT_OFFSET = 187        # how far above the window edge she sits
 KICK_LINES = ["Got it!", "Kick!", "Hehe!", "Again!", "Mine!", "Boing!"]
 DRINK_LINES = ["Glug glug!", "Hydrated!", "Good job!", "Sip sip~", "Yay, water!"]
 DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+# ---- BIRTHDAYS ----
+MONTHS = ["January", "February", "March", "April", "May", "June", "July",
+          "August", "September", "October", "November", "December"]
+DIGI_BIRTHDAY = (11, 14)        # the day Digi was made (2026)
+DIGI_BORN_YEAR = 2026
+BDAY_HEADS_UP = (7, 1)          # she mentions a birthday this many days ahead (plus on the day)
+BDAY_TIME = 9                   # birthday reminders come after this hour
+
+
+def next_birthday(month, day, today):
+    """The next date (today or later) this birthday falls on. Feb 29 -> Feb 28 in other years."""
+    for y in (today.year, today.year + 1):
+        try:
+            d = date(y, month, day)
+        except ValueError:
+            d = date(y, month, 28)
+        if d >= today:
+            return d
+    return today
+
+
+def days_until_birthday(month, day, today=None):
+    today = today or date.today()
+    return (next_birthday(month, day, today) - today).days
+
+
+def birthday_label(b):
+    return f"{b['name']} - {MONTHS[b['month'] - 1]} {b['day']}"
+
+
+def clean_birthday(b):
+    """A birthday dict from settings, or None if it's broken."""
+    try:
+        m, d = int(b["month"]), int(b["day"])
+        if not (1 <= m <= 12 and 1 <= d <= 31):
+            return None
+        out = {"month": m, "day": d}
+        if "name" in b:
+            out["name"] = str(b["name"]).strip()[:40] or "Someone"
+        return out
+    except Exception:
+        return None
 
 
 # Optional file next to Digi's code with someone's own starting setup (name, city, schedule).
@@ -1092,7 +1137,14 @@ class CustomizeDialog(QDialog):
                                   "QScrollArea > QWidget > QWidget { background: #f6f3fb; }")
         look_scroll.setWidget(look)
         tabs.addTab(look_scroll, "Look")
-        tabs.addTab(self.build_personal(), "Personal settings")
+        personal_scroll = QScrollArea()          # scrolls on small screens, like the Look tab
+        personal_scroll.setWidgetResizable(True)
+        personal_scroll.setFrameShape(QFrame.NoFrame)
+        personal_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        personal_scroll.setStyleSheet("QScrollArea { background: transparent; } "
+                                      "QScrollArea > QWidget > QWidget { background: #f6f3fb; }")
+        personal_scroll.setWidget(self.build_personal())
+        tabs.addTab(personal_scroll, "Personal settings")
         outer = QHBoxLayout(look)
         # live preview on the left
         self.preview = QLabel()
@@ -1285,6 +1337,31 @@ class CustomizeDialog(QDialog):
         row.addWidget(edit)
         col.addLayout(row)
 
+        col.addWidget(self.heading("Birthdays \U0001F382"))
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Your birthday:"))
+        self.my_month = QComboBox()
+        self.my_month.addItems(["(not set)"] + MONTHS)
+        self.my_day = QSpinBox()
+        self.my_day.setRange(1, 31)
+        for wdg in (self.my_month, self.my_day):
+            wdg.setStyleSheet("QComboBox, QSpinBox { padding: 3px 6px; border-radius: 6px; "
+                              "border: 1px solid #c9bfe3; background: white; color: #3a3159; }")
+        if pet.my_birthday:
+            self.my_month.setCurrentIndex(pet.my_birthday["month"])
+            self.my_day.setValue(pet.my_birthday["day"])
+        self.my_day.setEnabled(pet.my_birthday is not None)
+        self.my_month.currentIndexChanged.connect(lambda *a: self.pick_my_birthday())
+        self.my_day.valueChanged.connect(lambda *a: self.pick_my_birthday())
+        row.addWidget(self.my_month)
+        row.addWidget(self.my_day)
+        row.addStretch(1)
+        friends = self.option("Other birthdays...")
+        friends.setCheckable(False)
+        friends.clicked.connect(lambda *a: self.pet.open_birthdays())
+        row.addWidget(friends)
+        col.addLayout(row)
+
         col.addWidget(self.heading("Bedtime (she naps too)"))
         row = QHBoxLayout()
         self.sleep_on = QCheckBox("Nap at night")
@@ -1443,6 +1520,15 @@ class CustomizeDialog(QDialog):
         self.pet.say("Like my new bubble?" if k == "dark" else "Back to a bright bubble~", 2500)
         self.refresh()
 
+    def pick_my_birthday(self):
+        m = self.my_month.currentIndex()
+        self.my_day.setEnabled(m > 0)
+        new = {"month": m, "day": self.my_day.value()} if m > 0 else None
+        if new == self.pet.my_birthday:
+            return
+        self.pet.my_birthday = new
+        self.pet.save_custom()
+
     def pick_name(self):
         name = self.name_box.text().strip()
         if name == self.pet.nickname:
@@ -1546,6 +1632,114 @@ class ReminderEdit(QDialog):
         return (when, text, days)
 
 
+class BirthdayEdit(QDialog):
+    """Add or change one birthday."""
+
+    def __init__(self, parent, item=None):
+        super().__init__(parent)
+        self.setWindowTitle("Birthday")
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("Whose birthday?"))
+        self.name = QLineEdit()
+        self.name.setPlaceholderText("Mom, Alex, Grandpa...")
+        self.name.setMaxLength(40)
+        lay.addWidget(self.name)
+        lay.addWidget(QLabel("When?"))
+        row = QHBoxLayout()
+        self.month = QComboBox()
+        self.month.addItems(MONTHS)
+        self.day = QSpinBox()
+        self.day.setRange(1, 31)
+        row.addWidget(self.month)
+        row.addWidget(self.day)
+        row.addStretch(1)
+        lay.addLayout(row)
+        btns = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        ok = QPushButton("Save")
+        ok.setDefault(True)
+        cancel.clicked.connect(self.reject)
+        ok.clicked.connect(self.accept)
+        btns.addWidget(cancel)
+        btns.addWidget(ok)
+        lay.addLayout(btns)
+        if item:
+            self.name.setText(item["name"])
+            self.month.setCurrentIndex(item["month"] - 1)
+            self.day.setValue(item["day"])
+
+    def result_item(self):
+        return {"name": self.name.text().strip() or "Someone",
+                "month": self.month.currentIndex() + 1, "day": self.day.value()}
+
+
+class BirthdayManager(QDialog):
+    """Birthdays she remembers for you (she reminds you a week before, the day before and on the day)."""
+
+    def __init__(self, pet):
+        super().__init__(None)
+        self.pet = pet
+        self.setWindowTitle("Birthdays")
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.resize(420, 380)
+        lay = QVBoxLayout(self)
+        tip = QLabel("I'll remind you a week before, the day before, and on the day! \U0001F382")
+        tip.setWordWrap(True)
+        lay.addWidget(tip)
+        self.list = QListWidget()
+        self.list.itemDoubleClicked.connect(lambda *_: self.edit())
+        lay.addWidget(self.list)
+        row = QHBoxLayout()
+        for label, fn in (("Add", self.add), ("Edit", self.edit),
+                          ("Delete", self.delete), ("Done", self.accept)):
+            b = QPushButton(label)
+            b.clicked.connect(fn)
+            row.addWidget(b)
+        lay.addLayout(row)
+        self.refresh()
+
+    def refresh(self):
+        # soonest birthday first
+        self.pet.birthdays.sort(key=lambda b: days_until_birthday(b["month"], b["day"]))
+        self.list.clear()
+        for b in self.pet.birthdays:
+            n = days_until_birthday(b["month"], b["day"])
+            when = "today!" if n == 0 else ("tomorrow" if n == 1 else f"in {n} days")
+            self.list.addItem(QListWidgetItem(f"{birthday_label(b)}   ({when})"))
+
+    def changed(self):
+        self.pet.save_custom()
+        self.refresh()
+
+    def add(self):
+        dlg = BirthdayEdit(self)
+        if dlg.exec():
+            b = dlg.result_item()
+            self.pet.birthdays.append(b)
+            self.changed()
+            self.pet.say(f"Got it! I'll remember {b['name']}'s birthday \U0001F382", 3000)
+
+    def edit(self):
+        i = self.list.currentRow()
+        if i < 0:
+            return
+        dlg = BirthdayEdit(self, self.pet.birthdays[i])
+        if dlg.exec():
+            self.pet.birthdays[i] = dlg.result_item()
+            self.changed()
+
+    def delete(self):
+        i = self.list.currentRow()
+        if i < 0:
+            return
+        b = self.pet.birthdays[i]
+        ans = QMessageBox.question(self, "Delete birthday", "Forget this birthday?\n\n" + birthday_label(b))
+        if ans == QMessageBox.Yes:
+            del self.pet.birthdays[i]
+            self.changed()
+
+
 class ReminderManager(QDialog):
     """The list of all her reminders, with add / edit / delete."""
 
@@ -1567,6 +1761,9 @@ class ReminderManager(QDialog):
             b.clicked.connect(fn)
             row.addWidget(b)
         lay.addLayout(row)
+        bd = QPushButton("Birthdays... \U0001F382")
+        bd.clicked.connect(lambda *a: self.pet.open_birthdays())
+        lay.addWidget(bd)
         self.refresh()
 
     def refresh(self):
@@ -1830,6 +2027,8 @@ class Pet(QWidget):
         self.place = None                 # {"name", "lat", "lon"} for the weather
         self.units = "F"
         self.dnd_days = list(DND_DAYS)
+        self.birthdays = []               # [{"name", "month", "day"}] she reminds you of
+        self.my_birthday = None           # {"month", "day"}: she celebrates you!
         self.sleep_hours_set = list(SLEEP_HOURS)
         self.apply_personal(PERSONAL)     # someone's own starting setup, if there is one
         self.text_size = "medium"
@@ -1907,6 +2106,8 @@ class Pet(QWidget):
         self.streaming = False
         self.water = self.load_water()
         self.reminder_win = None
+        self.birthday_win = None
+        self.bday_checked = None          # day we last did the birthday reminders
         self.art = self.load_art()
         self.hair_layers = {}
         self.frames = self.load_frames()
@@ -2487,6 +2688,7 @@ class Pet(QWidget):
 
         menu.addAction(f"My reminders ({len(self.reminders)})...",
                        self.open_reminders)
+        menu.addAction(f"Birthdays ({len(self.birthdays)})...", self.open_birthdays)
 
         w = self.water_today()
         wm = menu.addMenu(f"Water ({w}/{self.water['goal']})")
@@ -4021,6 +4223,14 @@ class Pet(QWidget):
             self.peek_x = random.randint(int(lo), int(hi))
         self.set_mode("peek", 15)
 
+    def open_birthdays(self):
+        if self.birthday_win is None:
+            self.birthday_win = BirthdayManager(self)
+        self.birthday_win.refresh()
+        self.birthday_win.show()
+        self.birthday_win.raise_()
+        self.birthday_win.activateWindow()
+
     def open_reminders(self):
         if self.reminder_win is None:
             self.reminder_win = ReminderManager(self)
@@ -4359,7 +4569,8 @@ class Pet(QWidget):
                            "bottom": self.bottom, "bubble": self.bubble_mode, "nickname": self.nickname,
                            "text_size": self.text_size, "outline": self.outline,
                            "glow_told": self.glow_told, "place": self.place, "units": self.units,
-                           "dnd_days": self.dnd_days, "sleep_hours": self.sleep_hours_set}, f)
+                           "dnd_days": self.dnd_days, "sleep_hours": self.sleep_hours_set,
+                           "birthdays": self.birthdays, "my_birthday": self.my_birthday}, f)
         except Exception:
             pass
 
@@ -4377,6 +4588,12 @@ class Pet(QWidget):
             self.units = d["units"]
         if isinstance(d.get("dnd_days"), list):
             self.dnd_days = [x for x in d["dnd_days"] if x in DAY_ORDER]
+        if isinstance(d.get("birthdays"), list):
+            self.birthdays = [b for b in (clean_birthday(x) for x in d["birthdays"]
+                                          if isinstance(x, dict) and "name" in x) if b]
+        if "my_birthday" in d:
+            mb = d["my_birthday"]
+            self.my_birthday = clean_birthday(mb) if isinstance(mb, dict) else None
         sh = d.get("sleep_hours")
         if sh is None and "sleep_hours" in d:
             self.sleep_hours_set = None
@@ -4459,6 +4676,11 @@ class Pet(QWidget):
         if self.acc_mode != "auto":
             return self.acc_mode
         d = date.today()
+        # party days first: New Year's, Digi's birthday, your birthday
+        if (d.month, d.day) in ((12, 31), (1, 1)) or self.is_digi_birthday(d) or self.is_my_birthday(d):
+            return "party"
+        if d.month == 2 and 7 <= d.day <= 14:
+            return "heart"
         if d.month == 10:
             return "witch"
         if d.month == 12 or (d.month == 1 and d.day <= 5):
@@ -4684,6 +4906,20 @@ class Pet(QWidget):
             return
         self.greeted = key
         msg = GREETINGS.get(key)
+        party = False
+        if self.is_digi_birthday():
+            age = date.today().year - DIGI_BORN_YEAR
+            msg = (f"It's my birthday!! I'm {age} today! \U0001F382" if age > 0
+                   else "It's my birthday!! \U0001F382")
+            party = True
+        if self.is_my_birthday():
+            nm = (", " + self.nickname) if self.nickname else ""
+            msg = f"HAPPY BIRTHDAY{nm.upper()}!! \U0001F389\U0001F382 I hope today is amazing!"
+            party = True
+        if party and not self.reminder_active:
+            for _ in range(6):
+                self.hearts.append([random.randint(60, 160), 90, 0,
+                                    random.choice(["\U0001F389", "\U0001F388", "\u2665"])])
         if msg and not self.reminder_active:
             self.say(msg, 9000)
             self.happy = 60
@@ -4707,6 +4943,26 @@ class Pet(QWidget):
                 lines.append(f"Tomorrow is {label}!")
             elif 1 < n <= 60:
                 lines.append(f"{n} days until {label}!")
+        for b in self.birthdays:
+            n = days_until_birthday(b["month"], b["day"], today)
+            if n == 0:
+                lines.append(f"It's {b['name']}'s birthday today! \U0001F382")
+            elif 1 < n <= 14:
+                lines.append(f"{n} days until {b['name']}'s birthday!")
+        if self.my_birthday:
+            n = days_until_birthday(self.my_birthday["month"], self.my_birthday["day"], today)
+            if n == 0:
+                lines += ["Happy birthday!! \U0001F382", "It's your special day~ \u2728",
+                          "Did you get cake yet? \U0001F370"]
+            elif n == 1:
+                lines.append("Your birthday is tomorrow!! \U0001F389")
+            elif n <= 30:
+                lines.append(f"{n} days until your birthday! \U0001F389")
+        n = days_until_birthday(*DIGI_BIRTHDAY, today)
+        if n == 0:
+            lines += ["It's my birthday~ \U0001F382", "Party time! \U0001F389"]
+        elif n <= 21:
+            lines.append(f"{n} days until my birthday! \U0001F382" if n > 1 else "My birthday is tomorrow!!")
         dnd_numbers = [DAY_NUMBERS[d] for d in self.dnd_days]
         for offset in range(1, 8):
             if (today.weekday() + offset) % 7 in dnd_numbers:
@@ -4726,7 +4982,57 @@ class Pet(QWidget):
         self.vx = math.cos(angle) * SPEED
         self.vy = math.sin(angle) * SPEED * 0.5
 
+    def is_my_birthday(self, today=None):
+        b = self.my_birthday
+        return bool(b) and days_until_birthday(b["month"], b["day"], today) == 0
+
+    def is_digi_birthday(self, today=None):
+        return days_until_birthday(*DIGI_BIRTHDAY, today) == 0
+
+    def birthday_news(self, today=None):
+        """(sticky reminder for today's birthdays, heads-up line for upcoming ones)."""
+        today = today or date.today()
+        todays, soon = [], []
+        for b in self.birthdays:
+            n = days_until_birthday(b["month"], b["day"], today)
+            if n == 0:
+                todays.append(b["name"])
+            elif n in BDAY_HEADS_UP:
+                soon.append((n, b["name"]))
+        rem = None
+        if todays:
+            who = todays[0] if len(todays) == 1 else ", ".join(todays[:-1]) + " and " + todays[-1]
+            rem = f"Today is {who}'s birthday! \U0001F382 Don't forget to wish them a happy birthday!"
+        line = None
+        if soon:
+            n, name = min(soon)
+            if n == 1:
+                line = f"Psst! {name}'s birthday is tomorrow! \U0001F381"
+            else:
+                line = f"{name}'s birthday is in a week! Maybe think about a card or gift? \U0001F381"
+        return rem, line
+
+    def check_birthdays(self):
+        now = datetime.now()
+        key = now.strftime("%Y-%m-%d")
+        if self.bday_checked == key or now.hour < BDAY_TIME or self.sleep_hours:
+            return
+        if self.reminder_active or self.msg:
+            return                          # wait until she's not saying something else
+        self.bday_checked = key
+        rem, line = self.birthday_news(now.date())
+        if rem and line:
+            rem += "  " + line
+        if rem:
+            self.remind(rem)
+            for _ in range(4):
+                self.hearts.append([random.randint(70, 150), 90, 0, "\u2665"])
+        elif line:
+            self.say(line, 7000)
+            self.happy = 20
+
     def check_reminders(self):
+        self.check_birthdays()
         now = datetime.now()
         key = now.strftime("%H:%M")
         today = now.strftime("%Y-%m-%d")
@@ -5346,6 +5652,39 @@ class Pet(QWidget):
                 p.drawEllipse(QPointF(cx + 7 * math.cos(ang), cy + 7 * math.sin(ang)), 6, 6)
             p.setBrush(QBrush(QColor("#ffd54f")))
             p.drawEllipse(QPointF(cx, cy), 4.5, 4.5)
+        elif acc == "party":
+            # little striped cone tilted on the right side of her head, pom-pom on top
+            p.save()
+            p.translate(132, 34 + b)
+            p.rotate(18)
+            p.setPen(QPen(dark, 2))
+            p.setBrush(QBrush(QColor("#7ec8f0")))
+            cone = QPolygonF([QPointF(-17, 14), QPointF(17, 14), QPointF(0, -30)])
+            p.drawPolygon(cone)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(QColor("#ffd54f")))
+            for y0, hw in ((-12, 7), (2, 12.5)):
+                p.drawPolygon(QPolygonF([QPointF(-hw, y0), QPointF(hw, y0),
+                                         QPointF(hw + 2, y0 + 5), QPointF(-hw - 2, y0 + 5)]))
+            p.setPen(QPen(dark, 2))
+            p.setBrush(Qt.NoBrush)
+            p.drawPolygon(cone)
+            p.setBrush(QBrush(QColor("#f27fa8")))
+            p.drawEllipse(QPointF(0, -32), 6, 6)
+            p.restore()
+        elif acc == "heart":
+            # a pink heart hair clip on the right side
+            cx, cy = 146, 58 + b
+            p.setPen(QPen(dark, 1.8))
+            p.setBrush(QBrush(QColor("#f25c8a")))
+            heart = QPainterPath()
+            heart.moveTo(cx, cy + 9)
+            heart.cubicTo(cx - 14, cy, cx - 9, cy - 11, cx, cy - 4)
+            heart.cubicTo(cx + 9, cy - 11, cx + 14, cy, cx, cy + 9)
+            p.drawPath(heart)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(QColor(255, 255, 255, 170)))
+            p.drawEllipse(QPointF(cx - 4.5, cy - 3), 2.2, 1.6)
         elif acc == "scarf":
             b += 7
             p.setPen(QPen(dark, 2))
