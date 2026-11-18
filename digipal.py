@@ -177,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 12                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 13                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1188,6 +1188,10 @@ class CustomizeDialog(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.room = QPixmap(ROOM_FILE) if os.path.exists(ROOM_FILE) else QPixmap()
         self.in_room = not self.room.isNull()
+        self.anim_k = 0
+        self.anim = QTimer(self)
+        self.anim.setInterval(110)
+        self.anim.timeout.connect(self.anim_step)
         self.setStyleSheet("""
             QDialog { background: #f6f3fb; }
             QLabel#h { font-weight: bold; font-size: 13px; color: #4b3f7a; margin-top: 6px; }
@@ -1488,10 +1492,29 @@ class CustomizeDialog(QDialog):
                 w.setMinimumHeight(lay.heightForWidth(max(80, vw)))
 
     def update_preview(self):
-        pm = self.pet.preview_pixmap()
+        k = getattr(self, "anim_k", 0)
         if self.in_room and self.preview.width() > 0:
-            pm = pm.scaled(self.preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pm = self.pet.preview_pixmap(k, self.preview.width(), self.preview.height())
+        else:
+            pm = self.pet.preview_pixmap(k)
         self.preview.setPixmap(pm)
+
+    def anim_step(self):
+        # live Digi: she breathes / idles and blinks while you dress her up
+        self.anim_k = getattr(self, "anim_k", 0) + 1
+        try:
+            self.update_preview()
+        except Exception as ex:
+            self.anim.stop()
+            print("preview:", ex, file=sys.stderr, flush=True)
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self.anim.start()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self.anim.stop()
 
     def paintEvent(self, e):
         if self.in_room:
@@ -4968,34 +4991,49 @@ class Pet(QWidget):
             self.tint_cache[key] = tp
         return tp
 
-    def preview_pixmap(self):
-        """What she looks like right now, for the customize window."""
-        out = QPixmap(220, 260)
+    def preview_pixmap(self, k=0, w=220, h=260):
+        """What she looks like right now, for the customize window. k = animation step (she idles and blinks)."""
+        out = QPixmap(w, h)
         out.fill(Qt.transparent)
         acc = self.current_accessory()
-        pm, hl = None, None
+        blink = (k % 45) in (0, 1)             # a blink every few seconds
+
+        def pick(frames_by_state):
+            for st in (("blink", "idle") if blink else ("idle",)):
+                fr = frames_by_state.get(st)
+                if fr:
+                    return st, k % len(fr) if st == "idle" else 0, fr
+            return None, 0, None
+
+        pm, hl, state, idx = None, None, "idle", 0
         if acc and self.outfit_style == "3d":
             d = self.outfit_frames(acc)
-            if d.get("idle"):
-                pm = d["idle"][0]
+            st, i, fr = pick(d)
+            if fr:
+                state, idx, pm = st, i, fr[i]
                 if self.layered_hair():
-                    hl = self.style_layer(getattr(self, "outfit_folder", None), "idle", 0)
+                    hl = self.style_layer(getattr(self, "outfit_folder", None), st, i)
                 else:
-                    h = getattr(self, "outfit_hair", {}).get("idle") or [None]
-                    hl = h[0]
-        if pm is None and self.frames.get("idle"):
-            pm = self.frames["idle"][0]
-            if self.layered_hair():
-                hl = self.style_layer(self.frames_folder, "idle", 0)
-            else:
-                hl = (self.hair_layers.get("idle") or [None])[0]
+                    h = getattr(self, "outfit_hair", {}).get(st) or [None]
+                    hl = h[i] if i < len(h) else h[0]
+        if pm is None:
+            st, i, fr = pick(self.frames)
+            if fr:
+                state, idx, pm = st, i, fr[i]
+                if self.layered_hair():
+                    hl = self.style_layer(self.frames_folder, st, i)
+                else:
+                    h = self.hair_layers.get(st) or [None]
+                    hl = h[i] if i < len(h) else h[0]
         if pm is None:
             return out
         q = QPainter(out)
         q.setRenderHint(QPainter.SmoothPixmapTransform)
+        q.setRenderHint(QPainter.Antialiasing)
+        q.scale(w / 220, h / 260)
         extra = (pm.height() - 480) * 0.431
         target = QRectF(15, 38 + 20 - extra, 190, 207 + extra)
-        self.draw_layers(q, target, pm, hl, self.bottom_for("idle", 0))
+        self.draw_layers(q, target, pm, hl, self.bottom_for(state, idx))
         q.end()
         return out
 
