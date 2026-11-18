@@ -1,0 +1,7 @@
+# things that belong to one person's Digi, not the shared one
+personal_defaults.json
+pet_frames/
+pet_frames_old/
+*.log
+__pycache__/
+.DS_Store
