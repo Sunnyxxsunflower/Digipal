@@ -177,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 17                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 18                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -2443,6 +2443,9 @@ class Pet(QWidget):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(220, 240)
+        # while she's held and swinging, her window grows by this much so she isn't cut off;
+        # x()/y()/move() below keep talking about her normal 220x240 spot either way
+        self.pad_x = self.pad_y = 0
 
         self.area = QGuiApplication.primaryScreen().availableGeometry()
         self.px = float(self.area.right() - 260)
@@ -3084,7 +3087,7 @@ class Pet(QWidget):
             self.open_customize()
             return
         if e.button() == Qt.LeftButton:
-            self.drag_offset = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self.drag_offset = e.globalPosition().toPoint() - QPoint(self.x(), self.y())   # her normal spot
             self.dragging = True
             self.moved = False
             self.petting = False
@@ -3094,6 +3097,29 @@ class Pet(QWidget):
                 self.ptt_timer.start(350)      # hold still to talk
             if self.mode != "wander":
                 self.set_mode("wander", random.uniform(10, 20))
+
+    # ---- room to swing: grow the window while she's held, shrink it once she hangs still ----
+    SWING_PAD_X, SWING_PAD_Y = 85, 25
+
+    def x(self):
+        return QWidget.x(self) + self.pad_x
+
+    def y(self):
+        return QWidget.y(self) + self.pad_y
+
+    def move(self, *a):
+        pt = QPoint(a[0], a[1]) if len(a) == 2 else QPoint(a[0])
+        QWidget.move(self, pt - QPoint(self.pad_x, self.pad_y))
+
+    def set_swing_room(self, on):
+        want = (self.SWING_PAD_X, self.SWING_PAD_Y) if on else (0, 0)
+        if (self.pad_x, self.pad_y) == want:
+            return
+        x, y = self.x(), self.y()                 # her normal spot stays put
+        self.pad_x, self.pad_y = want
+        QWidget.setGeometry(self, x - self.pad_x, y - self.pad_y,
+                            220 + 2 * self.pad_x, 240 + self.pad_y)
+        self.update()
 
     def mouseMoveEvent(self, e):
         if self.ptt:
@@ -3105,6 +3131,7 @@ class Pet(QWidget):
                     return                       # tiny wiggle, not a drag yet
                 self.ptt_timer.stop()
                 self.surprised = True
+                self.set_swing_room(True)
                 if not self.reminder_active:
                     self.say("Eep!", 1500)
             pos = e.globalPosition().toPoint() - self.drag_offset
@@ -4111,7 +4138,7 @@ class Pet(QWidget):
         if self.bed or self.mode == "peek":
             return False
         dy = 33 if self.floor_sit else 0
-        return math.hypot(pos.x() - 110, pos.y() - (118 + dy)) < 14
+        return math.hypot(pos.x() - self.pad_x - 110, pos.y() - self.pad_y - (118 + dy)) < 14
 
     def boop(self):
         self.boop_until = time.time() + 1.6
@@ -6010,6 +6037,8 @@ class Pet(QWidget):
         self.swing_v *= 0.90                    # air friction
         self.swing += self.swing_v
         self.swing = max(-35.0, min(35.0, self.swing))
+        if self.pad_x and not self.dragging and abs(self.swing) < 1.0 and abs(self.swing_v) < 0.5:
+            self.set_swing_room(False)
         if not self.dragging and abs(self.swing) < 0.05 and abs(self.swing_v) < 0.05:
             self.swing = self.swing_v = 0.0
 
@@ -6313,6 +6342,8 @@ class Pet(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
+        if self.pad_x or self.pad_y:
+            p.translate(self.pad_x, self.pad_y)     # bigger window while she swings
 
         # hiding behind a window: don't draw her body where the window covers her
         clip = None
