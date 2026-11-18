@@ -19,8 +19,8 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QListWidgetItem, QPushButton, QLabel, QLineEdit,
                                QTimeEdit, QCheckBox, QMessageBox, QGridLayout,
                                QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
-                               QScrollArea, QComboBox, QSpinBox)
-from PySide6.QtCore import QTime, QRect
+                               QScrollArea, QComboBox, QSpinBox, QLayout, QStackedWidget)
+from PySide6.QtCore import QTime, QRect, QSize, QPoint
 
 IS_WIN = sys.platform == "win32"
 IS_LINUX = sys.platform.startswith("linux")
@@ -177,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 10                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 11                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1099,6 +1099,85 @@ HAIR_COLORS = [
 ]
 
 
+# Digi's room (Nancy's drawing) behind the Customize window; the settings live on the phone's screen.
+ROOM_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "digi_room.png")
+ROOM_SIZE = (2000, 1500)                 # the drawing's size; spots below are in its pixels
+ROOM_SCREEN = (1292, 196, 532, 1150)     # the phone's white screen: x, y, w, h
+ROOM_DIGI = (700, 1400, 940)             # where Digi stands on the rug: center x, feet y, height
+
+
+class FlowLayout(QLayout):
+    """Buttons that wrap onto the next line when the phone screen is narrow."""
+
+    def __init__(self, parent=None, spacing=6):
+        super().__init__(parent)
+        self.items = []
+        self.setSpacing(spacing)
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def addItem(self, item):
+        self.items.append(item)
+
+    def addWidget(self, w, *args, **kw):         # grid positions / stretch are ignored: it just flows
+        super().addWidget(w)
+
+    def addStretch(self, *a):
+        pass
+
+    def addSpacing(self, *a):
+        pass
+
+    def count(self):
+        return len(self.items)
+
+    def itemAt(self, i):
+        return self.items[i] if 0 <= i < len(self.items) else None
+
+    def takeAt(self, i):
+        return self.items.pop(i) if 0 <= i < len(self.items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self.place(QRect(0, 0, width, 0), True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self.place(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for it in self.items:
+            size = size.expandedTo(it.minimumSize())
+        m = self.contentsMargins()
+        return size + QSize(m.left() + m.right(), m.top() + m.bottom())
+
+    def place(self, rect, test):
+        x, y, line_h = rect.x(), rect.y(), 0
+        gap = self.spacing()
+        for it in self.items:
+            hint = it.sizeHint()
+            w = min(hint.width(), rect.width())
+            if x + w > rect.right() + 1 and line_h > 0:
+                x = rect.x()
+                y += line_h + gap
+                line_h = 0
+            h = it.heightForWidth(w) if it.hasHeightForWidth() else hint.height()
+            h = max(h, hint.height()) if not it.hasHeightForWidth() else h
+            if not test:
+                it.setGeometry(QRect(QPoint(x, y), QSize(w, h)))
+            x += w + gap
+            line_h = max(line_h, h)
+        return y + line_h - rect.y()
+
+
 class CustomizeDialog(QDialog):
     """Shift+click her (or right-click -> Customize Digi...) to dress her up."""
 
@@ -1107,6 +1186,8 @@ class CustomizeDialog(QDialog):
         self.pet = pet
         self.setWindowTitle("Customize Digi")
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.room = QPixmap(ROOM_FILE) if os.path.exists(ROOM_FILE) else QPixmap()
+        self.in_room = not self.room.isNull()
         self.setStyleSheet("""
             QDialog { background: #f6f3fb; }
             QLabel#h { font-weight: bold; font-size: 13px; color: #4b3f7a; margin-top: 6px; }
@@ -1120,44 +1201,83 @@ class CustomizeDialog(QDialog):
             QPushButton[class="opt"]:checked { background: #a99be0; color: white; border-color: #6b5f93; }
             QPushButton[class="opt"]:disabled { color: #b3abc9; }
         """)
-        main = QVBoxLayout(self)
-        tabs = QTabWidget()
-        tabs.setStyleSheet("QTabBar::tab { padding: 6px 14px; color: #3a3159; background: #ece8f5; "
-                           "border-top-left-radius: 8px; border-top-right-radius: 8px; margin-right: 2px; }"
-                           "QTabBar::tab:selected { background: #a99be0; color: white; }"
-                           "QTabWidget::pane { border: none; }")
-        main.addWidget(tabs)
         look = QWidget()
         # small laptop screens: let the Look tab scroll instead of squishing rows on top of each other
         look_scroll = QScrollArea()
         look_scroll.setWidgetResizable(True)
         look_scroll.setFrameShape(QFrame.NoFrame)
         look_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        look_scroll.setStyleSheet("QScrollArea { background: transparent; } "
-                                  "QScrollArea > QWidget > QWidget { background: #f6f3fb; }")
         look_scroll.setWidget(look)
-        tabs.addTab(look_scroll, "Look")
         personal_scroll = QScrollArea()          # scrolls on small screens, like the Look tab
         personal_scroll.setWidgetResizable(True)
         personal_scroll.setFrameShape(QFrame.NoFrame)
         personal_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        personal_scroll.setStyleSheet("QScrollArea { background: transparent; } "
-                                      "QScrollArea > QWidget > QWidget { background: #f6f3fb; }")
         personal_scroll.setWidget(self.build_personal())
-        tabs.addTab(personal_scroll, "Personal settings")
-        outer = QHBoxLayout(look)
-        # live preview on the left
+        # live preview of her
         self.preview = QLabel()
-        self.preview.setFixedSize(220, 260)
         self.preview.setAlignment(Qt.AlignCenter)
-        self.preview.setStyleSheet("background: #ece8f5; border-radius: 12px;")
-        outer.addWidget(self.preview)
-        col = QVBoxLayout()
-        outer.addLayout(col)
+        if self.in_room:
+            # the room is painted behind everything; Digi stands on the rug, settings go on the phone
+            self.preview.setParent(self)
+            self.preview.setStyleSheet("background: transparent;")
+            self.preview.setAttribute(Qt.WA_TransparentForMouseEvents)
+            for sc in (look_scroll, personal_scroll):
+                sc.setStyleSheet("QScrollArea { background: white; border: none; } "
+                                 "QScrollArea > QWidget > QWidget { background: white; }")
+            self.phone = QWidget(self)
+            self.phone.setObjectName("phone")
+            self.phone.setStyleSheet("QWidget#phone { background: white; }")
+            pl = QVBoxLayout(self.phone)
+            pl.setContentsMargins(4, 0, 4, 0)
+            pl.setSpacing(4)
+            self.phone_title = QLabel("Customize Digi")
+            self.phone_title.setStyleSheet("font-size: 17px; font-weight: bold; color: #3d4f75;")
+            pl.addWidget(self.phone_title)
+            self.pages = QStackedWidget()
+            self.pages.addWidget(look_scroll)
+            self.pages.addWidget(personal_scroll)
+            pl.addWidget(self.pages, 1)
+            dock = QHBoxLayout()
+            dock.setSpacing(6)
+            self.dock_buttons = []
+            for i, label in enumerate(("Look", "Me")):
+                b = QPushButton(label)
+                b.setCheckable(True)
+                b.setProperty("class", "dock")
+                b.clicked.connect(lambda *a, i=i: self.show_page(i))
+                self.dock_buttons.append(b)
+                dock.addWidget(b)
+            done = QPushButton("Done")
+            done.setProperty("class", "done")
+            done.clicked.connect(self.accept)
+            dock.addWidget(done)
+            pl.addLayout(dock)
+            self.show_page(0)
+            col = QVBoxLayout(look)
+            col.setContentsMargins(2, 2, 6, 2)
+        else:
+            for sc in (look_scroll, personal_scroll):
+                sc.setStyleSheet("QScrollArea { background: transparent; } "
+                                 "QScrollArea > QWidget > QWidget { background: #f6f3fb; }")
+            main = QVBoxLayout(self)
+            tabs = QTabWidget()
+            tabs.setStyleSheet("QTabBar::tab { padding: 6px 14px; color: #3a3159; background: #ece8f5; "
+                               "border-top-left-radius: 8px; border-top-right-radius: 8px; margin-right: 2px; }"
+                               "QTabBar::tab:selected { background: #a99be0; color: white; }"
+                               "QTabWidget::pane { border: none; }")
+            main.addWidget(tabs)
+            tabs.addTab(look_scroll, "Look")
+            tabs.addTab(personal_scroll, "Personal settings")
+            outer = QHBoxLayout(look)
+            self.preview.setFixedSize(220, 260)
+            self.preview.setStyleSheet("background: #ece8f5; border-radius: 12px;")
+            outer.addWidget(self.preview)
+            col = QVBoxLayout()
+            outer.addLayout(col)
 
         # outline: a soft glow around her so she doesn't vanish on dark windows (first, so it's easy to find)
         col.addWidget(self.heading("Glow outline"))
-        row = QHBoxLayout()
+        row = self.hrow()
         self.outline_buttons = {}
         for key, label in (("glow", "Glow \u2728"), ("off", "Off")):
             b = self.option(label)
@@ -1167,14 +1287,19 @@ class CustomizeDialog(QDialog):
         tip = QLabel("Glow so I don't get lost in dark mode!")
         tip.setStyleSheet("background: white; color: #4b3f7a; border: 1px solid #c9bfe3; "
                           "border-radius: 10px; padding: 4px 10px; font-size: 12px;")
-        row.addSpacing(6)
-        row.addWidget(tip)
-        row.addStretch(1)
-        col.addLayout(row)
+        tip.setWordWrap(True)
+        if self.in_room:
+            col.addLayout(row)
+            col.addWidget(tip)          # on its own line on the phone
+        else:
+            row.addSpacing(6)
+            row.addWidget(tip)
+            row.addStretch(1)
+            col.addLayout(row)
 
         # hair style
         col.addWidget(self.heading("Hair style"))
-        hg = QGridLayout()
+        hg = self.gridl()
         self.style_hair_buttons = {}
         for i, (key, label) in enumerate(HAIR_STYLES):
             b = self.option(label)
@@ -1185,7 +1310,7 @@ class CustomizeDialog(QDialog):
 
         # skirt or shorts
         col.addWidget(self.heading("Bottoms"))
-        row = QHBoxLayout()
+        row = self.hrow()
         self.bottom_buttons = {}
         for key, label in BOTTOMS:
             b = self.option(label)
@@ -1197,7 +1322,7 @@ class CustomizeDialog(QDialog):
 
         # speech bubble: light (white bubble, black text) or dark (black bubble, white text)
         col.addWidget(self.heading("Speech bubble"))
-        row = QHBoxLayout()
+        row = self.hrow()
         self.bubble_buttons = {}
         for key, label in (("light", "Light"), ("dark", "Dark")):
             b = self.option(label)
@@ -1213,7 +1338,7 @@ class CustomizeDialog(QDialog):
             row.addWidget(b)
         row.addStretch(1)
         col.addLayout(row)
-        row = QHBoxLayout()
+        row = self.hrow()
         self.spot_buttons = {}
         for key, label in (("above", "Above her head"), ("side", "Next to her")):
             b = self.option(label)
@@ -1222,7 +1347,7 @@ class CustomizeDialog(QDialog):
             row.addWidget(b)
         row.addStretch(1)
         col.addLayout(row)
-        row = QHBoxLayout()
+        row = self.hrow()
         self.textsize_buttons = {}
         for key, label in (("small", "Small text"), ("medium", "Medium text"), ("large", "Big text")):
             b = self.option(label)
@@ -1234,7 +1359,7 @@ class CustomizeDialog(QDialog):
 
         # hair
         col.addWidget(self.heading("Hair color"))
-        grid = QGridLayout()
+        grid = self.gridl()
         grid.setSpacing(6)
         self.swatches = {}
         orig = self.option("Original")
@@ -1258,7 +1383,7 @@ class CustomizeDialog(QDialog):
 
         # outfit
         col.addWidget(self.heading("Outfit"))
-        og = QGridLayout()
+        og = self.gridl()
         self.outfit_buttons = {}
         for i, (key, label) in enumerate(ACC_MENU):
             b = self.option(label.replace(" (changes by month)", ""))
@@ -1266,7 +1391,7 @@ class CustomizeDialog(QDialog):
             self.outfit_buttons[key] = b
             og.addWidget(b, i // 4, i % 4)
         col.addLayout(og)
-        srow = QHBoxLayout()
+        srow = self.hrow()
         self.style_buttons = {}
         for key, label in (("3d", "3D outfits"), ("drawn", "Drawn outfits")):
             b = self.option(label)
@@ -1277,22 +1402,98 @@ class CustomizeDialog(QDialog):
         col.addLayout(srow)
 
         col.addStretch(1)
-        done = QPushButton("Done")
-        done.setStyleSheet("QPushButton { padding: 6px 22px; border-radius: 8px; background: #a99be0; "
-                           "color: white; border: 1px solid #6b5f93; font-weight: bold; }"
-                           "QPushButton:hover { background: #9483d6; }")
-        done.clicked.connect(self.accept)
-        main.addWidget(done, alignment=Qt.AlignRight)
+        if self.in_room:
+            self.setStyleSheet(self.styleSheet() + """
+                QDialog { background: #e1ebdf; }
+                QLabel#h { color: #3d4f75; }
+                QPushButton[class="opt"] { padding: 4px 8px; border-color: #b8c5dc; font-size: 12px; }
+                QPushButton[class="opt"]:hover { background: #eef2f9; }
+                QPushButton[class="opt"]:checked { background: #7389b0; border-color: #4e6590; color: white; }
+                QPushButton[class="dock"] { padding: 6px 4px; border-radius: 10px; border: 1px solid #b8c5dc;
+                                            background: #f3f6fb; color: #3d4f75; font-weight: bold; }
+                QPushButton[class="dock"]:checked { background: #dfe7f4; border-color: #7389b0; }
+                QPushButton[class="done"] { padding: 6px 4px; border-radius: 10px; border: 1px solid #4e6590;
+                                            background: #7389b0; color: white; font-weight: bold; }
+                QPushButton[class="done"]:hover { background: #637aa3; }
+            """)
+        else:
+            done = QPushButton("Done")
+            done.setStyleSheet("QPushButton { padding: 6px 22px; border-radius: 8px; background: #a99be0; "
+                               "color: white; border: 1px solid #6b5f93; font-weight: bold; }"
+                               "QPushButton:hover { background: #9483d6; }")
+            done.clicked.connect(self.accept)
+            main.addWidget(done, alignment=Qt.AlignRight)
         self.refresh()
-        # as big as everything needs, but never taller than the screen (then the Look tab scrolls)
         try:
-            want = look.sizeHint()
             scr = (pet.screen() if pet is not None else None) or QApplication.primaryScreen()
             avail = scr.availableGeometry()
-            self.resize(min(want.width() + 60, avail.width() - 40),
-                        min(want.height() + 110, avail.height() - 60))
+            if self.in_room:
+                # the room keeps its shape: as big as fits (up to 1100 wide)
+                rw, rh = ROOM_SIZE
+                k = min(1100 / rw, (avail.width() - 40) / rw, (avail.height() - 60) / rh)
+                self.setFixedSize(int(rw * k), int(rh * k))
+            else:
+                # as big as everything needs, but never taller than the screen (then the Look tab scrolls)
+                want = look.sizeHint()
+                self.resize(min(want.width() + 60, avail.width() - 40),
+                            min(want.height() + 110, avail.height() - 60))
         except Exception as ex:
             print("customize size:", ex, file=sys.stderr, flush=True)
+
+    # ---------- the room ----------
+    def show_page(self, i):
+        self.pages.setCurrentIndex(i)
+        self.phone_title.setText(("Customize Digi", "About you")[i])
+        for j, b in enumerate(self.dock_buttons):
+            b.setChecked(i == j)
+
+    def hrow(self):
+        return FlowLayout() if self.in_room else QHBoxLayout()
+
+    def gridl(self):
+        return FlowLayout() if self.in_room else QGridLayout()
+
+    def room_k(self):
+        return self.width() / ROOM_SIZE[0]
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if not self.in_room:
+            return
+        k = self.room_k()
+        x, y, w, h = ROOM_SCREEN
+        self.phone.setGeometry(int(x * k), int(y * k), int(w * k), int(h * k))
+        cx, feet, tall = ROOM_DIGI
+        ph = int(tall * k)
+        pw = int(ph * 220 / 260)
+        self.preview.setGeometry(int(cx * k - pw / 2), int(feet * k - ph), pw, ph)
+        self.update_preview()
+        QTimer.singleShot(0, self.fit_pages)
+
+    def fit_pages(self):
+        # wrapped button rows: tell each page how tall it really is at the phone's width
+        for i in range(self.pages.count()):
+            sc = self.pages.widget(i)
+            w = sc.widget()
+            lay = w.layout() if w else None
+            if lay is not None and lay.hasHeightForWidth():
+                vw = sc.viewport().width() - (0 if sc.verticalScrollBar().isVisible() else sc.verticalScrollBar().sizeHint().width())
+                w.setMinimumHeight(lay.heightForWidth(max(80, vw)))
+
+    def update_preview(self):
+        pm = self.pet.preview_pixmap()
+        if self.in_room and self.preview.width() > 0:
+            pm = pm.scaled(self.preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.preview.setPixmap(pm)
+
+    def paintEvent(self, e):
+        if self.in_room:
+            p = QPainter(self)
+            p.setRenderHint(QPainter.SmoothPixmapTransform)
+            p.drawPixmap(self.rect(), self.room)
+            p.end()
+        else:
+            super().paintEvent(e)
 
     # ---------- the Personal settings tab ----------
     BOX_STYLE = ("QLineEdit, QTimeEdit { padding: 5px 8px; border-radius: 8px; border: 1px solid #c9bfe3; "
@@ -1312,7 +1513,7 @@ class CustomizeDialog(QDialog):
         col.addWidget(self.name_box)
 
         col.addWidget(self.heading("Where do you live? (for the weather)"))
-        row = QHBoxLayout()
+        row = self.hrow()
         self.city_box = QLineEdit()
         self.city_box.setPlaceholderText("Type your city, then press Find")
         self.city_box.setStyleSheet(self.BOX_STYLE)
@@ -1330,7 +1531,7 @@ class CustomizeDialog(QDialog):
         self.city_results.itemClicked.connect(self.pick_city)
         self.city_results.hide()
         col.addWidget(self.city_results)
-        row = QHBoxLayout()
+        row = self.hrow()
         self.place_label = QLabel()
         row.addWidget(self.place_label)
         row.addStretch(1)
@@ -1343,7 +1544,7 @@ class CustomizeDialog(QDialog):
         col.addLayout(row)
 
         col.addWidget(self.heading("Your schedule"))
-        row = QHBoxLayout()
+        row = self.hrow()
         lab = QLabel("Meals, water breaks, stretches... she reminds you every day.")
         lab.setWordWrap(True)
         row.addWidget(lab, 1)
@@ -1354,7 +1555,7 @@ class CustomizeDialog(QDialog):
         col.addLayout(row)
 
         col.addWidget(self.heading("Birthdays \U0001F382"))
-        row = QHBoxLayout()
+        row = self.hrow()
         row.addWidget(QLabel("Your birthday:"))
         self.my_month = QComboBox()
         self.my_month.addItems(["(not set)"] + MONTHS)
@@ -1379,7 +1580,7 @@ class CustomizeDialog(QDialog):
         col.addLayout(row)
 
         col.addWidget(self.heading("Bedtime (she naps too)"))
-        row = QHBoxLayout()
+        row = self.hrow()
         self.sleep_on = QCheckBox("Nap at night")
         row.addWidget(self.sleep_on)
         sh = pet.sleep_hours_set or ["00:30", "08:30"]
@@ -1403,7 +1604,7 @@ class CustomizeDialog(QDialog):
         lab = QLabel("From 7pm on these days she plays D&D with you, and counts down to the next one.")
         lab.setWordWrap(True)
         col.addWidget(lab)
-        row = QHBoxLayout()
+        row = self.hrow()
         self.day_buttons = {}
         for d in DAY_ORDER:
             b = self.option(d)
@@ -1491,6 +1692,7 @@ class CustomizeDialog(QDialog):
     def heading(self, text):
         lab = QLabel(text)
         lab.setObjectName("h")
+        lab.setWordWrap(True)           # long ones wrap on the narrow phone screen
         return lab
 
     def option(self, text):
@@ -1528,7 +1730,7 @@ class CustomizeDialog(QDialog):
             b.setChecked(k == pet.acc_mode)
         for k, b in self.style_buttons.items():
             b.setChecked(k == pet.outfit_style)
-        self.preview.setPixmap(pet.preview_pixmap())
+        self.update_preview()
 
     def pick_hairstyle(self, k):
         self.pet.set_hairstyle(k)
