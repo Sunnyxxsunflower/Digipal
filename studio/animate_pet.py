@@ -695,10 +695,9 @@ def ring_tube(name, pts, rad, sides=6):
 beret_band = outfit_mat("of_beret_band", "#6b1b1e", 0.85)          # renders about #7a2a2e, darker than the top
 
 
-def contact_line(m, dist=0.02, below=0.08):
+def contact_line(m, dist=0.02, below=None):
     """Draw a black outline on this material wherever it touches something (her head or her hair),
-    like an inked line. Only on the lower part (object z under `below`) so the fold under the
-    cushion doesn't get one."""
+    like an inked line. `below`: only on the part under that object z (None: everywhere)."""
     nt = m.node_tree
     bsdf = nt.nodes.get("Principled BSDF")
     out = next(n for n in nt.nodes if n.type == "OUTPUT_MATERIAL")
@@ -712,6 +711,20 @@ def contact_line(m, dist=0.02, below=0.08):
     ramp.color_ramp.elements[1].position = 0.72
     ramp.color_ramp.elements[1].color = (0, 0, 0, 1)
     nt.links.new(ao.outputs["AO"], ramp.inputs["Fac"])
+    if below is None:
+        fac = ramp.outputs["Color"]
+    else:
+        fac = _below_mask(nt, ramp, below)
+    ink = nt.nodes.new("ShaderNodeEmission")
+    ink.inputs["Color"].default_value = (0.006, 0.005, 0.006, 1)
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    nt.links.new(fac, mix.inputs["Fac"])
+    nt.links.new(bsdf.outputs["BSDF"], mix.inputs[1])
+    nt.links.new(ink.outputs["Emission"], mix.inputs[2])
+    nt.links.new(mix.outputs["Shader"], out.inputs["Surface"])
+
+
+def _below_mask(nt, ramp, below):
     tc = nt.nodes.new("ShaderNodeTexCoord")
     sep = nt.nodes.new("ShaderNodeSeparateXYZ")
     nt.links.new(tc.outputs["Object"], sep.inputs[0])
@@ -725,16 +738,11 @@ def contact_line(m, dist=0.02, below=0.08):
     mul.use_clamp = True
     nt.links.new(ramp.outputs["Color"], mul.inputs[0])
     nt.links.new(low.outputs["Result"], mul.inputs[1])
-    ink = nt.nodes.new("ShaderNodeEmission")
-    ink.inputs["Color"].default_value = (0.006, 0.005, 0.006, 1)
-    mix = nt.nodes.new("ShaderNodeMixShader")
-    nt.links.new(mul.outputs["Value"], mix.inputs["Fac"])
-    nt.links.new(bsdf.outputs["BSDF"], mix.inputs[1])
-    nt.links.new(ink.outputs["Emission"], mix.inputs[2])
-    nt.links.new(mix.outputs["Shader"], out.inputs["Surface"])
+    return mul.outputs["Value"]
 
 
-contact_line(beret_band, below=0.12)     # black line where the band rests on her head or her hair
+# the whole band can have it: the fold under the cushion is red top material, so it never gets a line
+contact_line(beret_band)                 # black line where the band rests on her head or her hair
 update()
 o, _line = beret_mesh("Beret", BERET.matrix_world.inverted() @ HEAD_C)
 o = hat_part(o, beret_red, BERET, (0, 0, 0))
