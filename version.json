@@ -28,6 +28,7 @@
     "sounds/chime_middle.wav",
     "sounds/chime_end.wav",
     "sounds/chime_shurong.wav",
+    "Install DigiPal.bat",
     "version.json"
   ],
   "frames_patches": [
