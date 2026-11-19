@@ -577,9 +577,9 @@ for sx in (-1, 1):
 # brim is as wide as ours, in our own straw and ribbon colors.
 SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.8
-SUNHAT_SHAPES = {"Cloth.001": 1.0, "HatPos2": 1.0}   # the model's droopy pose (Nancy's pick)
-SUNHAT_CROWN_UP = 1.0                    # (taller crown: not needed, her hair tucks under instead)
-SUNHAT_DROOP = (0.0, 0.0)                # (extra brim droop: not needed with the droopy pose)
+SUNHAT_SHAPES = {}                       # the model's own droopy pose squashes the crown, so:
+SUNHAT_CROWN_UP = 1.08                   # its plain shape (crown a touch taller), and
+SUNHAT_DROOP = (0.24, 0.10)              # our own big floppy droop: all around, plus extra at her sides
 
 
 def import_strawhat(path, keys=None):
