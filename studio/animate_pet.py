@@ -1931,7 +1931,7 @@ scene.cycles.samples = 24
 # hats that tuck her hair under them: any hair poking out through the hat (the hat is between it
 # and the middle of her head) is snipped off, only while that hat's frames render, so it looks
 # like the hair goes in under the hat
-HAIR_TUCK = {"sunhat"}
+HAIR_TUCK = set()                        # (sun hat: its roomy inside fits her hair, so no snipping needed)
 
 
 def tuck_hair(hat_objs, depth=0.6):
