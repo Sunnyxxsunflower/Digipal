@@ -16,5 +16,13 @@
     "install_linux.sh",
     "digi_room.png",
     "version.json"
+  ],
+  "frames_patches": [
+    {
+      "version": 2,
+      "url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-2/outfits_party_heart.zip",
+      "mb": 216,
+      "what": "party hat + heart clip"
+    }
   ]
 }
