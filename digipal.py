@@ -182,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 26                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 27                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1637,8 +1637,11 @@ class CustomizeDialog(QDialog):
         col.addWidget(lab)
         row = self.hrow()
         self.sound_buttons = {}
+        self.sound_group = QButtonGroup(self)        # only one sound can be picked
+        self.sound_group.setExclusive(True)
         for key, label in MED_SOUNDS:
             b = self.option(label)
+            self.sound_group.addButton(b)
             b.clicked.connect(lambda *a, k=key: self.pick_med_sound(k))
             self.sound_buttons[key] = b
             row.addWidget(b)
@@ -1662,8 +1665,11 @@ class CustomizeDialog(QDialog):
         col.addWidget(self.heading("Breathing guide"))
         row = self.hrow()
         self.guide_buttons = {}
+        self.guide_group = QButtonGroup(self)
+        self.guide_group.setExclusive(True)
         for key, label in ((True, "Words + glow"), (False, "Just the glow")):
             b = self.option(label)
+            self.guide_group.addButton(b)
             b.clicked.connect(lambda *a, k=key: self.pick_med_guide(k))
             self.guide_buttons[key] = b
             row.addWidget(b)
