@@ -66,6 +66,17 @@ save("gong", place(6.0, [(0, lambda t: strike(t, 130.8, [(1, 1, 1, 0.7), (1.48, 
 ting = lambda t: strike(t, 2217.0, [(1, 1, 1, 6.0), (1.52, 0.4, 1.6, 4.0), (2.33, 0.2, 2.4, 0)], 1.1)
 save("tingsha", place(4.5, [(0, ting), (0.9, lambda t: 0.8 * ting(t))]))
 
+# shurong bell: a medium brass bowl struck once - a bright "ting" of the mallet, then a clear,
+# shimmering ring that hangs in the air for a long time
+def shurong(t):
+    ring = strike(t, 349.2, [(1, 1, 1, 1.3), (2.72, 0.62, 1.35, 2.1), (5.06, 0.34, 1.9, 2.8),
+                             (8.2, 0.14, 2.7, 0)], 0.42, attack=0.002)
+    hit = np.random.default_rng(3).standard_normal(len(t)) * np.exp(-t * 180)       # the mallet tap
+    from scipy import signal
+    b, a = signal.butter(2, [2500 / (SR / 2), 7000 / (SR / 2)], "band")
+    return ring + 0.35 * signal.lfilter(b, a, hit)
+save("shurong", place(7.5, [(0, shurong)]))
+
 # middle: a lighter single tone; end: two rising notes
 save("middle", place(3.0, [(0, lambda t: strike(t, 659.25, [(1, 1, 1, 0), (2.76, 0.35, 1.25, 0)], 2.4))]), 0.4)
 save("end", place(3.4, [(0, lambda t: strike(t, 784.0, [(1, 1, 1, 0), (2.76, 0.35, 1.25, 0)], 2.4)),

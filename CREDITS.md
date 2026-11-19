@@ -13,7 +13,7 @@
   [Freesound](https://freesound.org/people/brunoauzet/sounds/730154/) (Creative Commons 0).
   Trimmed, made into a seamless loop and volume-matched.
 
-- **Chimes** (soft bell, singing bowl, wind chimes, gong, tingsha, middle and end tones): made from
+- **Chimes** (soft bell, singing bowl, Shurong bell, wind chimes, gong, tingsha, middle and end tones): made from
   scratch for Digi (`studio/make_chimes.py`).
 
 CC0 sounds don't require credit, but thank you to the people who recorded them!

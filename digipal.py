@@ -182,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 31                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 32                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -202,7 +202,8 @@ DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 MED_CHOICES = (5, 10, 15, 20, 30)        # minutes
 MED_SOUNDS = [("none", "None"), ("white", "White noise"), ("pink", "Pink noise"),
               ("forest", "Forest"), ("river", "River"), ("waves", "Waves")]
-MED_CHIMES = [("bell", "Soft bell"), ("bowl", "Singing bowl"), ("windchimes", "Wind chimes"),
+MED_CHIMES = [("bell", "Soft bell"), ("bowl", "Singing bowl"), ("shurong", "Shurong bell"),
+              ("windchimes", "Wind chimes"),
               ("gong", "Gong"), ("tingsha", "Tingsha"), ("none", "None")]
 MED_LATER = 30                           # "Later": she asks again in this many minutes
 MED_ANSWER_WAIT = 180                    # no answer this long: she quietly treats it as "Later"

@@ -1,5 +1,5 @@
 {
-  "version": 31,
+  "version": 32,
   "frames_version": 1,
   "frames_mb": 800,
   "frames_url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-1/pet_frames.zip",
@@ -27,6 +27,7 @@
     "sounds/chime_tingsha.wav",
     "sounds/chime_middle.wav",
     "sounds/chime_end.wav",
+    "sounds/chime_shurong.wav",
     "version.json"
   ],
   "frames_patches": [
