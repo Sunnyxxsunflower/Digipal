@@ -169,6 +169,12 @@ ACC_NAMES = {"auto": "Outfit: seasonal", "santa": "Santa hat!", "witch": "Witch 
              "sunhat": "Sun hat! \u2600", "beret": "A cozy beret~ \U0001F342", "bunny": "Bunny ears! Hop hop~",
              "glasses": "Ooh, smart glasses!", "bow": "A big bow! \U0001F380", "star": "A little star! \u2B50",
              "none": "No outfit"}
+# drawn stand-in outfits (used only while a 3D picture is missing): how far down her head is in
+# each pose, and the poses where a flat drawing can sit right at all
+ACC_DROP = {"sitfloor": 33, "typing": 33, "cuddle_teddy": 33, "cuddle_ball": 33, "meditate": 26,
+            "sit": 2, "held": 3}
+ACC_DROP_OK = {"idle", "blink", "happy", "walk", "sing", "surprised", "sitfloor", "typing", "cuddle_teddy",
+               "cuddle_ball", "meditate", "sit", "shy", "scared", "shiver", "camera", "umbrella", "stretch"}
 ACC_MENU = [("auto", "Seasonal (changes by month)"), ("santa", "Santa hat"),
             ("witch", "Witch hat"), ("party", "Party hat"), ("heart", "Heart clip"),
             ("ears", "Cat ears"), ("flower", "Flower"),
@@ -186,7 +192,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 33                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 34                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1480,15 +1486,7 @@ class CustomizeDialog(QDialog):
             self.outfit_buttons[key] = b
             og.addWidget(b, i // 4, i % 4)
         col.addLayout(og)
-        srow = self.hrow()
-        self.style_buttons = {}
-        for key, label in (("3d", "3D outfits"), ("drawn", "Drawn outfits")):
-            b = self.option(label)
-            b.clicked.connect(lambda *a, k=key: self.pick_style(k))
-            self.style_buttons[key] = b
-            srow.addWidget(b)
-        srow.addStretch(1)
-        col.addLayout(srow)
+        self.style_buttons = {}          # (the old 3D / drawn choice: every outfit is 3D now)
 
         col.addStretch(1)
         if self.in_room:
@@ -3663,11 +3661,6 @@ class Pet(QWidget):
         for key, label in ACC_MENU:
             self.add_toggle(om, label, self.acc_mode == key,
                             lambda v, k=key: self.set_outfit(k))
-        om.addSeparator()
-        self.add_toggle(om, "Style: 3D (rendered)", self.outfit_style == "3d",
-                        lambda v: self.set_outfit_style("3d"))
-        self.add_toggle(om, "Style: drawn (flat)", self.outfit_style == "drawn",
-                        lambda v: self.set_outfit_style("drawn"))
         self.add_toggle(menu, "Game mode", self.game_mode, self.set_game_mode)
         self.add_toggle(menu, "Stream mode (sit quietly in the corner)",
                         self.stream_manual, self.set_stream_manual)
@@ -5489,16 +5482,18 @@ class Pet(QWidget):
             return None, 0, None
 
         pm, hl, state, idx = None, None, "idle", 0
+        used_3d = False
         if acc and self.outfit_style == "3d":
             d = self.outfit_frames(acc)
             st, i, fr = pick(d)
             if fr:
                 state, idx, pm = st, i, fr[i]
+                used_3d = True
                 if self.layered_hair():
                     hl = self.style_layer(getattr(self, "outfit_folder", None), st, i)
                 else:
-                    h = getattr(self, "outfit_hair", {}).get(st) or [None]
-                    hl = h[i] if i < len(h) else h[0]
+                    hs = getattr(self, "outfit_hair", {}).get(st) or [None]
+                    hl = hs[i] if i < len(hs) else hs[0]
         if pm is None:
             st, i, fr = pick(self.frames)
             if fr:
@@ -5506,8 +5501,8 @@ class Pet(QWidget):
                 if self.layered_hair():
                     hl = self.style_layer(self.frames_folder, st, i)
                 else:
-                    h = self.hair_layers.get(st) or [None]
-                    hl = h[i] if i < len(h) else h[0]
+                    hs = self.hair_layers.get(st) or [None]
+                    hl = hs[i] if i < len(hs) else hs[0]
         if pm is None:
             return out
         q = QPainter(out)
@@ -5517,6 +5512,8 @@ class Pet(QWidget):
         extra = (pm.height() - 480) * 0.431
         target = QRectF(15, 38 + 20 - extra, 190, 207 + extra)
         self.draw_layers(q, target, pm, hl, self.bottom_for(state, idx))
+        if acc and not used_3d:
+            self.draw_accessory_3d(q, 20, acc)      # drawn stand-in until its 3D pictures arrive
         q.end()
         return out
 
@@ -5589,7 +5586,7 @@ class Pet(QWidget):
             if d.get("outfit") in ACC_MODES:
                 self.acc_mode = d["outfit"]
             if d.get("style") in ("3d", "drawn"):
-                self.outfit_style = d["style"]
+                self.outfit_style = "3d"       # drawn outfits retired: everything has 3D pictures
             if d.get("hairstyle") in [k for k, _ in HAIR_STYLES]:
                 self.hairstyle = d["hairstyle"]
             if d.get("bottom") in [k for k, _ in BOTTOMS]:
@@ -7314,8 +7311,9 @@ class Pet(QWidget):
                     hx = (hp.height() - 480) * 0.431
                     p.drawPixmap(QRectF(15, 38 + b - hx, 190, 207 + hx), hp, QRectF(hp.rect()))
             acc = self.current_accessory()
-            if acc and not self.bed and not dressed and not state.startswith("peek"):
-                self.draw_accessory_3d(p, b + (33 if self.floor_sit else 0), acc)
+            if (acc and not self.bed and not (dressed and state in dressed)
+                    and not state.startswith("peek") and state in ACC_DROP_OK):
+                self.draw_accessory_3d(p, b + ACC_DROP.get(state, 0), acc)
         elif self.singing and self.dance_enabled:
             p.translate(110, 150)
             p.rotate(7 * math.sin(self.t / 5))
