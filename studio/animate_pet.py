@@ -1978,8 +1978,8 @@ scene.cycles.samples = 24
 
 # ------------------------------------------------------------- posing helpers
 # hats that tuck her hair under them: any hair poking out through the hat (the hat is between it
-# and the middle of her head) is snipped off, only while that hat's frames render, so it looks
-# like the hair goes in under the hat
+# and the middle of her head) is pressed flat just behind the hat, only while that hat's frames
+# render, so it looks like the hair goes in under the hat
 HAIR_TUCK = {"sunhat"}
 
 
@@ -2002,7 +2002,9 @@ def tuck_hair(hat_objs, margin=0.03):
             import bmesh
             bm = bmesh.new()
             bm.from_mesh(me)
-            cut = []
+            mwi = mw.inverted()
+            cut, moved = [], 0
+            toward_cam = Vector((0, -1, 0))
             for v in bm.verts:
                 p = mw @ v.co
                 for tree, hw, hwi in hats:
@@ -2010,17 +2012,26 @@ def tuck_hair(hat_objs, margin=0.03):
                     a0, a1 = hwi @ HEAD_C, hwi @ p
                     d = a1 - a0
                     hit = tree.ray_cast(a0, d.normalized(), d.length) if d.length > 1e-6 else (None,)
-                    # it pokes out through the hat, a little way past it: snip (the edge of the
-                    # snip stays just behind the hat, so the hat hides it and where the hair
-                    # meets the hat stays the smooth line Blender draws)
-                    if hit[0] is not None and d.length - hit[3] > margin:
+                    if hit[0] is None or d.length - hit[3] <= margin:
+                        continue
+                    # it pokes out through the hat: press it flat against the OUTSIDE of the hat,
+                    # just behind it. The hair stays one smooth piece (no cut edges, so no jagged
+                    # outlines), the hat hides the pressed part, and where the hair goes into the
+                    # hat stays the smooth curve Blender draws.
+                    out = (hw.to_3x3() @ d).normalized()
+                    if out.dot(toward_cam) > 0.3:  # that side of the hat faces you: snip instead
                         cut.append(v)
-                        break
-            if not cut:
+                    else:
+                        q = a0 + d.normalized() * (hit[3] + margin)
+                        v.co = mwi @ (hw @ q)
+                        moved += 1
+                    break
+            if not cut and not moved:
                 bm.free()
                 bpy.data.meshes.remove(me)
                 continue
-            bmesh.ops.delete(bm, geom=cut, context="VERTS")   # snip it off (the rest is under the hat)
+            if cut:
+                bmesh.ops.delete(bm, geom=cut, context="VERTS")
             bm.to_mesh(me)
             bm.free()
             mods = [(m, m.show_render, m.show_viewport) for m in o.modifiers]
