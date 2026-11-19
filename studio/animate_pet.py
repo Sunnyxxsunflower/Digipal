@@ -661,7 +661,9 @@ def beret_mesh(name, hc=None):
         a = FOLD_AT - FOLD_SPAN * 0.8 + FOLD_SPAN * 1.6 * k / 40
         w = fold_w(a)
         zc = FOLD_Z + 0.01                     # along the lower lip of the puff, so it shows
-        crease.append((place(0.54 + fold_dr(zc) * w + 0.005, zc, a, True),
+        # sit just outside the felt everywhere around it, so no bit of the line sinks in and breaks
+        rs = max(0.54 + fold_dr(zc + dz * 0.001) * w for dz in range(-9, 10))
+        crease.append((place(rs + 0.0045, zc, a, True),
                        math.sin(math.pi * k / 40) ** 0.6))
     for row, (ra, rb) in enumerate(zip(rings, rings[1:])):
         for i in range(N):
