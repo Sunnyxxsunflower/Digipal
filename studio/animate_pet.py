@@ -1931,10 +1931,10 @@ scene.cycles.samples = 24
 # hats that tuck her hair under them: any hair poking out through the hat (the hat is between it
 # and the middle of her head) is snipped off, only while that hat's frames render, so it looks
 # like the hair goes in under the hat
-HAIR_TUCK = set()                        # (sun hat: its roomy inside fits her hair, so no snipping needed)
+HAIR_TUCK = {"sunhat"}
 
 
-def tuck_hair(hat_objs, depth=0.6):
+def tuck_hair(hat_objs, margin=0.03):
     from mathutils.bvhtree import BVHTree
     reset()
     update()
@@ -1961,39 +1961,16 @@ def tuck_hair(hat_objs, depth=0.6):
                     a0, a1 = hwi @ HEAD_C, hwi @ p
                     d = a1 - a0
                     hit = tree.ray_cast(a0, d.normalized(), d.length) if d.length > 1e-6 else (None,)
-                    if hit[0] is not None:          # it pokes out through the hat: snip
+                    # it pokes out through the hat, a little way past it: snip (the edge of the
+                    # snip stays just behind the hat, so the hat hides it and where the hair
+                    # meets the hat stays the smooth line Blender draws)
+                    if hit[0] is not None and d.length - hit[3] > margin:
                         cut.append(v)
                         break
             if not cut:
                 bm.free()
                 bpy.data.meshes.remove(me)
                 continue
-            # a clean cut: the hair right at the edge of the snip slides onto the hat's surface,
-            # so the cut follows the hat smoothly instead of a jagged edge of whole triangles
-            cutset = set(cut)
-            mwi = mw.inverted()
-            for v in bm.verts:
-                if v in cutset:
-                    continue
-                outs = [e.other_vert(v) for e in v.link_edges if e.other_vert(v) in cutset]
-                if not outs:
-                    continue
-                p0 = mw @ v.co
-                best = None
-                for n in outs:
-                    p1 = mw @ n.co
-                    for tree, hw, hwi in hats:
-                        a0 = hwi @ p0
-                        d = (hwi @ p1) - a0
-                        if d.length < 1e-7:
-                            continue
-                        hit = tree.ray_cast(a0, d.normalized(), d.length)
-                        if hit[0] is not None:
-                            w = hw @ hit[0]
-                            if best is None or (w - p0).length < (best - p0).length:
-                                best = w
-                if best is not None:
-                    v.co = mwi @ best
             bmesh.ops.delete(bm, geom=cut, context="VERTS")   # snip it off (the rest is under the hat)
             bm.to_mesh(me)
             bm.free()
