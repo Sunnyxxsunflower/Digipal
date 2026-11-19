@@ -79,6 +79,10 @@ except Exception:
 # on Windows, keep her (and her toys) out of the taskbar
 TOOL_FLAG = Qt.Tool if HELPER else Qt.Widget
 
+# on a Mac, Qt's "bring to front" also makes the whole app active, which pulls your typing
+# away from whatever you're working in. Digi only ever wants to be seen, never to grab the keyboard.
+os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
+
 # can she see where other windows are (to sit on them / peek around them)?
 HAS_WINLIST = HAS_QUARTZ or (HELPER and W is not None)
 
@@ -178,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 20                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 21                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1265,7 +1269,7 @@ class CustomizeDialog(QDialog):
                                            | QPainter.SmoothPixmapTransform)
             self.phone.setStyleSheet("QWidget#phone { background: white; }")
             pl = QVBoxLayout(self.phone)
-            pl.setContentsMargins(4, 0, 4, 0)
+            pl.setContentsMargins(4, 0, 4, 6)
             pl.setSpacing(4)
             self.phone_title = QLabel("Customize Digi")
             self.phone_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #3d4f75;")
@@ -1288,6 +1292,7 @@ class CustomizeDialog(QDialog):
             done.setProperty("class", "done")
             done.clicked.connect(self.accept)
             dock.addWidget(done)
+            pl.addSpacing(10)                # a little breathing room above the buttons
             pl.addLayout(dock)
             self.show_page(0)
             self.room_bubble = RoomBubble(pet, self)
@@ -2304,7 +2309,8 @@ class BubbleWin(QWidget):
             self.move(x, y)
         if not self.isVisible():
             self.show()
-            self.raise_()
+            if not IS_MAC:          # on a Mac, raising would make Digi the active app (steals typing)
+                self.raise_()
 
     def measure(self, text, where):
         """Bubble size for this text. Above: wide and short. Beside: narrow and tall."""
