@@ -576,6 +576,15 @@ for sx in (-1, 1):
 # studio/models, it replaces the simple one above: fitted so the crown hugs her hair and the
 # brim is as wide as ours, in our own straw and ribbon colors.
 SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
+# one fitting per ponytail hair style (shaggy and swept share SUNHAT_SHORT further down):
+#   crown_r: how roomy the inside is, dy/dz: moved back/up on her head, tilt: tipped back (degrees),
+#   tuck: snip any hair poking out past the hat
+SUNHAT_FITS = {
+    "twintails":  {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True},
+    "shorttails": {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True},
+    "drills":     {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True},
+}
+SUNHAT_STYLE = {}                        # style -> (frame, hat objects, fit)
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.84        # a roomy inside, so her hair fits under the hat
 SUNHAT_SHAPES = {}                       # the model's own droopy pose squashes the crown, so:
 SUNHAT_CROWN_UP = 1.08                   # its plain shape (crown a touch taller), and
@@ -696,6 +705,13 @@ if os.path.exists(SUNHAT_BLEND):
     SUNHAT_SHORT.location.y += 0.10
     SUNHAT_SHORT.location.z -= 0.10
     SUNHAT_SHORT_OBJS = import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES, crown_r=0.66, frame=SUNHAT_SHORT)
+    # and each ponytail style gets its OWN sun hat too (its own frames, outfit_sunhat-<style>),
+    # so each can be fitted to that hair: crown size, position, tilt, and whether to snip
+    for _style, _fit in SUNHAT_FITS.items():
+        _fr = empty("SunHatFrame_" + _style, (0.0, _fit["dy"], 2.28 + _fit["dz"]), HEAD)
+        _fr.rotation_euler = (math.radians(_fit["tilt"]), math.radians(-5), 0)
+        SUNHAT_STYLE[_style] = (_fr, import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES,
+                                                      crown_r=_fit["crown_r"], frame=_fr), _fit)
 else:
     SUNHAT_SHORT, SUNHAT_SHORT_OBJS = SUNHAT, []
 
@@ -2693,14 +2709,35 @@ if OUTFITS_MODE:
             o.hide_render = False
         all_styles = STYLE_PICK
         tuck = name in HAIR_TUCK
-        if name in BIG_HATS:
-            STYLE_PICK = [x for x in all_styles if x not in BIG_STYLES]
+        split = SUNHAT_STYLE if name == "sunhat" else {}
+        for style, (sfr, sobjs, fit) in split.items():   # a hat made just for this hair style
+            if style not in all_styles:
+                continue
+            for o in objs:
+                o.hide_render = True
+            for o in sobjs:
+                o.hide_render = False
+            STYLE_PICK = [style]
+            CURRENT_OUTFIT = name + "-" + style
+            saved = tuck_hair(sobjs) if fit["tuck"] else []
+            render_states()
+            untuck_hair(saved)
+            for o in sobjs:
+                o.hide_render = True
+            for o in objs:
+                o.hide_render = False
+        STYLE_PICK = [x for x in all_styles if x not in split]
+        if not STYLE_PICK:
+            pass
+        elif name in BIG_HATS:
+            rest = STYLE_PICK
+            STYLE_PICK = [x for x in rest if x not in BIG_STYLES]
             if STYLE_PICK:
                 CURRENT_OUTFIT = name
                 saved = tuck_hair(objs) if tuck else []
                 render_states()
                 untuck_hair(saved)
-            STYLE_PICK = [x for x in all_styles if x in BIG_STYLES]
+            STYLE_PICK = [x for x in rest if x in BIG_STYLES]
             if STYLE_PICK:
                 fr = BIG_HATS[name]
                 loc0, sc0 = fr.location.copy(), fr.scale.copy()
@@ -2726,10 +2763,10 @@ if OUTFITS_MODE:
                         o.hide_render = False
                 HAIRSTYLES["swept"] += tufts
                 fr.location, fr.scale = loc0, sc0
-            STYLE_PICK = all_styles
         else:
             CURRENT_OUTFIT = name
             render_states()
+        STYLE_PICK = all_styles
         for o in objs:
             o.hide_render = True
     CURRENT_OUTFIT = None

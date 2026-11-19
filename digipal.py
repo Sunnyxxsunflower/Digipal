@@ -5631,10 +5631,12 @@ class Pet(QWidget):
 
     def outfit_frames(self, acc):
         """Frames of her wearing a 3D outfit, loaded the first time it's worn."""
-        # the bigger hair styles have their own Santa/witch frames (hat a bit lower and bigger)
+        # the bigger hair styles have their own Santa/witch frames (hat a bit lower and bigger),
+        # and some hats (the sun hat) have frames made just for one hair style
         names = ["outfit_" + acc]
         if self.hairstyle in ("shaggy", "swept"):
             names.insert(0, "outfit_" + acc + "-big")
+        names.insert(0, "outfit_" + acc + "-" + self.hairstyle)
         key = (acc, names[0])
         if key in self.outfit_cache:
             return self.outfit_cache[key]
