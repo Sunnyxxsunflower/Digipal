@@ -182,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 23                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 24                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -199,7 +199,9 @@ DRINK_LINES = ["Glug glug!", "Hydrated!", "Good job!", "Sip sip~", "Yay, water!"
 DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 # ---- MEDITATION ----
-MED_CHOICES = (1, 3, 5, 10)              # minutes
+MED_CHOICES = (5, 10, 15, 20, 30)        # minutes
+MED_LATER = 30                           # "Later": she asks again in this many minutes
+MED_ANSWER_WAIT = 180                    # no answer this long: she quietly treats it as "Later"
 BREATH = (("Breathe in...", 4), ("Hold...", 4), ("Breathe out...", 6))   # seconds per step
 MED_START_LINES = ["Let's breathe together~ \U0001F33F", "Okay... nice and slow~",
                    "Getting comfy on my cushion~"]
@@ -1702,6 +1704,21 @@ class CustomizeDialog(QDialog):
         self.sleep_from.timeChanged.connect(lambda *a: self.pick_sleep())
         self.sleep_to.timeChanged.connect(lambda *a: self.pick_sleep())
 
+        col.addWidget(self.heading("Daily meditation \U0001F9D8"))
+        row = self.hrow()
+        self.med_on = QCheckBox("Invite me every day at")
+        row.addWidget(self.med_on)
+        self.med_at = QTimeEdit(QTime.fromString(pet.med_time or "12:00", "HH:mm"))
+        self.med_at.setDisplayFormat("h:mm AP")
+        self.med_at.setStyleSheet(self.BOX_STYLE)
+        row.addWidget(self.med_at)
+        row.addStretch(1)
+        col.addLayout(row)
+        self.med_on.setChecked(bool(pet.med_time))
+        self.med_at.setEnabled(bool(pet.med_time))
+        self.med_on.toggled.connect(lambda *a: self.pick_med_time())
+        self.med_at.timeChanged.connect(lambda *a: self.pick_med_time())
+
         col.addWidget(self.heading("Game nights (D&D)"))
         lab = QLabel("From 7pm on these days she plays D&D with you, and counts down to the next one.")
         lab.setWordWrap(True)
@@ -1778,6 +1795,11 @@ class CustomizeDialog(QDialog):
         self.pet.dnd_days = [x for x in DAY_ORDER if x in days]
         self.pet.save_custom()
         self.refresh()
+
+    def pick_med_time(self):
+        on = self.med_on.isChecked()
+        self.med_at.setEnabled(on)
+        self.pet.set_med_time(self.med_at.time().toString("HH:mm") if on else None)
 
     def pick_sleep(self):
         global SLEEP_HOURS
@@ -2463,6 +2485,51 @@ class BubbleWin(QWidget):
             self.hide()
 
 
+class ChoiceBar(QWidget):
+    """A row of little buttons under Digi for answering her (Yes / Later / No, how long...)."""
+
+    def __init__(self, pet, options, on_pick):
+        super().__init__(None)
+        self.pet = pet
+        self.on_pick = on_pick
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(4, 4, 4, 4)
+        row.setSpacing(6)
+        for label, key in options:
+            b = QPushButton(label)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setFocusPolicy(Qt.NoFocus)
+            b.setStyleSheet("QPushButton { padding: 5px 12px; border-radius: 12px; font-size: 13px; "
+                            "font-weight: bold; color: #3a3159; background: white; "
+                            "border: 2px solid #a99be0; }"
+                            "QPushButton:hover { background: #efeaf9; }")
+            b.clicked.connect(lambda *a, k=key: self.pick(k))
+            row.addWidget(b)
+        self.adjustSize()
+        self.follow()
+        self.show()
+
+    def pick(self, key):
+        self.hide()
+        self.deleteLater()
+        self.on_pick(key)
+
+    def follow(self):
+        pet = self.pet
+        area = pet.screen().availableGeometry() if pet.screen() else pet.area
+        x = pet.x() + 110 - self.width() // 2
+        y = pet.y() + 238
+        if y + self.height() > area.bottom():
+            y = pet.y() - self.height() - 4
+        x = max(area.left(), min(area.right() - self.width(), x))
+        if (self.x(), self.y()) != (x, y):
+            self.move(x, y)
+
+
 class RoomBubble(BubbleWin):
     """Her bubble inside the Customize room, over the Digi standing on the rug."""
 
@@ -2623,6 +2690,13 @@ class Pet(QWidget):
         self.med_total = 0                # minutes, all time
         self.med_pending = []             # reminders that waited until she was done
         self.med_phase = -1
+        self.med_time = None              # "HH:MM": she invites you to meditate every day at this time
+        self.med_asked_day = None         # the day she already asked (and you said no / did it)
+        self.med_ask_at = None            # "Later": ask again at this time
+        self.med_asking = False           # walking to the middle and asking right now
+        self.med_asked_since = 0
+        self.med_awaiting_more = False    # time's up: "keep going?"
+        self.choice_bar = None
         self.sleep_hours_set = list(SLEEP_HOURS)
         self.apply_personal(PERSONAL)     # someone's own starting setup, if there is one
         self.text_size = "medium"
@@ -3356,6 +3430,7 @@ class Pet(QWidget):
             mm.addSeparator()
             self.add_toggle(mm, "Breathing guide (in / hold / out)", self.med_guide, self.set_med_guide)
             mm.addAction("My meditation stats", self.say_med_stats)
+            mm.addAction("Ask me now (test the daily invite)", self.invite_meditation)
         if self.focus_end or self.break_end:
             menu.addAction("Stop timer", self.stop_focus)
         else:
@@ -5279,7 +5354,8 @@ class Pet(QWidget):
                            "dnd_days": self.dnd_days, "sleep_hours": self.sleep_hours_set,
                            "birthdays": self.birthdays, "my_birthday": self.my_birthday,
                            "med_days": self.med_days[-400:], "med_total": self.med_total,
-                           "med_guide": self.med_guide}, f)
+                           "med_guide": self.med_guide, "med_time": self.med_time,
+                           "med_asked_day": self.med_asked_day}, f)
         except Exception:
             pass
 
@@ -5306,6 +5382,10 @@ class Pet(QWidget):
             self.med_total = int(d["med_total"])
         if "med_guide" in d:
             self.med_guide = bool(d["med_guide"])
+        if d.get("med_time") is None or re.fullmatch(r"\d\d:\d\d", str(d.get("med_time"))):
+            self.med_time = d.get("med_time")
+        if isinstance(d.get("med_asked_day"), str):
+            self.med_asked_day = d["med_asked_day"]
         if "my_birthday" in d:
             mb = d["my_birthday"]
             self.my_birthday = clean_birthday(mb) if isinstance(mb, dict) else None
@@ -5438,12 +5518,117 @@ class Pet(QWidget):
             self.pomo = False
         if self.activity:
             self.end_activity(quiet=True)
+        self.close_choices()
+        self.med_asking = False
+        self.med_awaiting_more = False
         self.med_minutes_set = minutes
         self.med_start = time.time()
         self.med_end = self.med_start + minutes * 60
         self.med_phase = -1
         self.happy = 0
         self.say(random.choice(MED_START_LINES), 3500)
+
+    def show_choices(self, options, on_pick):
+        if self.choice_bar is not None:
+            try:
+                self.choice_bar.hide()
+                self.choice_bar.deleteLater()
+            except Exception:
+                pass
+        def picked(key):
+            self.choice_bar = None
+            on_pick(key)
+        self.choice_bar = ChoiceBar(self, options, picked)
+
+    def close_choices(self):
+        if self.choice_bar is not None:
+            try:
+                self.choice_bar.hide()
+                self.choice_bar.deleteLater()
+            except Exception:
+                pass
+            self.choice_bar = None
+
+    def check_med_invite(self):
+        """Her daily meditation invite (and "Later" asking again)."""
+        now = datetime.now()
+        if self.med_asking:
+            if time.time() - self.med_asked_since > MED_ANSWER_WAIT:
+                self.answer_invite("later", quiet=True)
+            return
+        if self.med_end or self.bed or self.sleep_hours or self.reminder_active or self.dragging:
+            return
+        due = False
+        if self.med_ask_at and time.time() >= self.med_ask_at:
+            due = True
+        elif self.med_time and self.med_asked_day != now.strftime("%Y-%m-%d") and not self.med_ask_at:
+            due = now.strftime("%H:%M") >= self.med_time
+        if not due:
+            return
+        if self.focus_end or self.streaming:
+            self.med_ask_at = time.time() + MED_LATER * 60     # busy (focus timer / movie): try later
+            return
+        self.invite_meditation()
+
+    def invite_meditation(self):
+        if self.activity:
+            self.end_activity(quiet=True)
+        self.med_ask_at = None
+        self.med_asking = True
+        self.med_asked_since = time.time()
+        self.say("Ready for a little meditation? \U0001F9D8", MED_ANSWER_WAIT * 1000)
+        self.show_choices([("Yes", "yes"), ("Later", "later"), ("No", "no")], self.answer_invite)
+
+    def answer_invite(self, key, quiet=False):
+        self.med_asking = False
+        self.close_choices()
+        today = date.today().isoformat()
+        if key == "yes":
+            self.med_asked_day = today
+            self.save_custom()
+            self.say("Yay! How long should we go?", 60000)
+            self.show_choices([(f"{m} min", m) for m in MED_CHOICES], self.pick_med_length)
+        elif key == "later":
+            self.med_ask_at = time.time() + MED_LATER * 60
+            if not quiet:
+                self.say(f"Okay! I'll ask again in {MED_LATER} minutes~", 3000)
+            else:
+                self.msg = None
+        else:
+            self.med_asked_day = today
+            self.med_ask_at = None
+            self.save_custom()
+            self.say("Okay! Maybe tomorrow~ \u2665", 2500)
+
+    def pick_med_length(self, minutes):
+        self.start_meditation(int(minutes))
+
+    def ask_keep_going(self):
+        """Time's up: chime, then ask if you'd like to keep going (same length again)."""
+        self.med_awaiting_more = True
+        self.med_asked_since = time.time()
+        self.play_chime()
+        self.say("Time's up~ Want to keep going?", 120000)
+        m = self.med_minutes_set
+        self.show_choices([(f"Yes (+{m} min)", "yes"), ("No", "no")], self.answer_keep_going)
+
+    def answer_keep_going(self, key):
+        self.med_awaiting_more = False
+        self.close_choices()
+        if key == "yes" and self.med_end:
+            # keep going: another round of the same length, so your time doubles
+            self.med_end = time.time() + self.med_minutes_set * 60
+            self.med_phase = -1
+            self.say("Okay~ let's keep breathing \U0001F33F", 3000)
+        else:
+            self.stop_meditation(chimed=True)
+
+    def set_med_time(self, hhmm):
+        self.med_time = hhmm
+        self.med_ask_at = None
+        if hhmm and datetime.now().strftime("%H:%M") >= hhmm:
+            self.med_asked_day = date.today().isoformat()     # set after today's time: start tomorrow
+        self.save_custom()
 
     def set_med_guide(self, value):
         self.med_guide = value
@@ -5470,9 +5655,11 @@ class Pet(QWidget):
         self.say(f"{streak}{days} day{'s' if days != 1 else ''} of meditating together, "
                  f"{self.med_total} minutes in all \U0001F33F", 6000)
 
-    def stop_meditation(self, early=False):
+    def stop_meditation(self, early=False, chimed=False):
         if not self.med_end:
             return
+        self.close_choices()
+        self.med_awaiting_more = False
         done = (min(time.time(), self.med_end) - (self.med_start or time.time())) / 60
         self.med_end = None
         self.med_phase = -1
@@ -5485,7 +5672,8 @@ class Pet(QWidget):
         if early:
             self.say("That's okay~ Every little breath counts \u2665", 3000)
         else:
-            self.play_chime()
+            if not chimed:
+                self.play_chime()
             n = self.med_streak()
             line = random.choice(MED_END_LINES)
             if n > 1:
@@ -5501,8 +5689,12 @@ class Pet(QWidget):
         if not self.med_end:
             return
         now = time.time()
+        if self.med_awaiting_more:
+            if now - self.med_asked_since > 120:
+                self.answer_keep_going("no")
+            return
         if now >= self.med_end:
-            self.stop_meditation()
+            self.ask_keep_going()
             return
         if self.med_guide:
             # cycle: in / hold / out, shown in her bubble
@@ -6117,7 +6309,7 @@ class Pet(QWidget):
     def check_mode(self):
         now = time.time()
         blocked = (self.focus_end or self.sleep_hours or self.reminder_active or self.med_end
-                   or not self.wander or self.dragging or self.streaming
+                   or self.med_asking or not self.wander or self.dragging or self.streaming
                    or self.ball is not None or self.falling)
         win = None
         if self.windows_enabled and HAS_WINLIST:
@@ -6290,6 +6482,12 @@ class Pet(QWidget):
             return
         if self.pose_now() and not self.activity:
             return
+        if self.med_asking:
+            tx = self.area.center().x() - 110
+            ty = self.area.center().y() - 120
+            if abs(self.px - tx) > 2 or abs(self.py - ty) > 2:
+                self.glide(tx, ty, 6.0)
+            return
         if self.med_end:
             return                              # she stays put on her cushion
         if self.activity:
@@ -6325,6 +6523,8 @@ class Pet(QWidget):
             if self.bubble_win is None:
                 self.bubble_win = BubbleWin(self)
             self.bubble_win.follow()
+            if self.choice_bar is not None:
+                self.choice_bar.follow()
         except Exception as ex:
             print("bubble:", ex, file=sys.stderr, flush=True)
 
@@ -6459,6 +6659,7 @@ class Pet(QWidget):
             self.check_timers()
             self.check_focus()
             self.check_meditation()
+            self.check_med_invite()
             self.check_eye_rest()
             self.check_battery()
             self.update_tick()
@@ -6799,7 +7000,7 @@ class Pet(QWidget):
 
         # timer label
         label = None
-        if self.med_end:
+        if self.med_end and not self.med_awaiting_more:
             left = max(0, int(self.med_end - time.time()))
             label = f"breathe {left // 60}:{left % 60:02d}"
         elif self.focus_end:
