@@ -580,6 +580,7 @@ SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.8
 SUNHAT_SHAPES = {}                       # the model's own droopy pose squashes the crown, so:
 SUNHAT_CROWN_UP = 1.08                   # its plain shape (crown a touch taller), and
 SUNHAT_DROOP = (0.24, 0.10)              # our own big floppy droop: all around, plus extra at her sides
+SUNHAT_DOME = 0.2                        # how much the flat top rounds up into a dome
 
 
 def import_strawhat(path, keys=None):
@@ -621,6 +622,7 @@ def import_strawhat(path, keys=None):
                 "top z %.3f, z min %.3f" % (cx, cy, rmax, brim_top, crown_r, ztop, min(v.z for v in vs)))
     s = SUNHAT_BRIM_R / rmax
     c = crown_r * s
+    crown_top = (ztop - brim_top) * s * SUNHAT_CROWN_UP
     f = max(1.0, SUNHAT_CROWN_R / c)            # widen just the crown if it's too small for her hair
     c2 = max(c * 1.35, c * f * 1.1)
 
@@ -640,6 +642,9 @@ def import_strawhat(path, keys=None):
         edge = c * f                           # where the crown meets the brim
         if r < edge * 1.02 and q.z > 0:
             q.z *= SUNHAT_CROWN_UP
+            # round the flat top into a dome (the top grows most in the middle, the walls stay put)
+            k = min(1.0, max(0.0, (q.z / crown_top - 0.55) / 0.4))
+            q.z += SUNHAT_DOME * k * k * (3 - 2 * k) * max(0.0, 1 - (r / edge) ** 2)
         if r > edge * 1.05:                    # the brim curves gently down, more at her sides
             t = min(1.0, (r - edge * 1.05) / (SUNHAT_BRIM_R - edge * 1.05))
             side = (q.x / r) ** 2
@@ -1919,12 +1924,12 @@ scene.cycles.samples = 24
 
 
 # ------------------------------------------------------------- posing helpers
-# hats that tuck her hair under them: any hair poking up through the hat gets pressed down just
-# under it (only while that hat's frames render), so it looks like the hair is hiding under the hat
+# hats that tuck her hair under them: any hair poking up through the hat is snipped off (only
+# while that hat's frames render), so it looks like the hair is hiding under the hat
 HAIR_TUCK = {"sunhat"}
 
 
-def tuck_hair(hat_objs, depth=0.4, margin=0.03):
+def tuck_hair(hat_objs, depth=0.6):
     from mathutils.bvhtree import BVHTree
     reset()
     update()
@@ -1940,21 +1945,24 @@ def tuck_hair(hat_objs, depth=0.4, margin=0.03):
             seen.add(o.name)
             me = bpy.data.meshes.new_from_object(o.evaluated_get(deps))   # modifiers baked in
             mw = o.matrix_world.copy()
-            mwi = mw.inverted()
-            moved = 0
-            for v in me.vertices:
+            import bmesh
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            cut = []
+            for v in bm.verts:
                 p = mw @ v.co
                 for tree, hw, hwi in hats:
-                    q = hwi @ p
-                    hit = tree.ray_cast(q, Vector((0, 0, -1)), depth)
+                    hit = tree.ray_cast(hwi @ p, Vector((0, 0, -1)), depth)
                     if hit[0] is not None:          # the hat is right below: this bit pokes out
-                        q2 = Vector((q.x, q.y, hit[0].z - margin))
-                        p = hw @ q2
-                        moved += 1
-                v.co = mwi @ p
-            if not moved:
+                        cut.append(v)
+                        break
+            if not cut:
+                bm.free()
                 bpy.data.meshes.remove(me)
                 continue
+            bmesh.ops.delete(bm, geom=cut, context="VERTS")   # snip it off (the rest is under the hat)
+            bm.to_mesh(me)
+            bm.free()
             mods = [(m, m.show_render, m.show_viewport) for m in o.modifiers]
             for m, _, _ in mods:
                 m.show_render = m.show_viewport = False
