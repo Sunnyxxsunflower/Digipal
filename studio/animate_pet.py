@@ -1929,7 +1929,7 @@ scene.cycles.samples = 24
 # ------------------------------------------------------------- posing helpers
 # hats that tuck her hair under them: any hair poking up through the hat is snipped off (only
 # while that hat's frames render), so it looks like the hair is hiding under the hat
-HAIR_TUCK = {"sunhat"}
+HAIR_TUCK = set()                        # (the sun hat is worn tipped back now: her hair sits in front of it)
 
 
 def tuck_hair(hat_objs, depth=0.6):
