@@ -8,12 +8,12 @@ import time
 import threading
 import subprocess
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, QRect
 from PySide6.QtGui import (QFontMetrics, QPainter, QColor, QPen, QBrush, QPolygonF,
                            QFont, QGuiApplication, QTextOption, QCursor,
-                           QRegion, QPixmap, QPainterPath)
+                           QRegion, QPixmap, QPainterPath, QRadialGradient)
 from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QDialog, QVBoxLayout, QHBoxLayout, QListWidget,
                                QListWidgetItem, QPushButton, QLabel, QLineEdit,
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
                                QScrollArea, QComboBox, QSpinBox, QLayout, QStackedWidget,
                                QGraphicsView, QGraphicsScene)
-from PySide6.QtCore import QTime, QRect, QSize, QPoint
+from PySide6.QtCore import QTime, QRect, QSize, QPoint, QUrl
 
 IS_WIN = sys.platform == "win32"
 IS_LINUX = sys.platform.startswith("linux")
@@ -182,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 22                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 23                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -197,6 +197,16 @@ SIT_OFFSET = 187        # how far above the window edge she sits
 KICK_LINES = ["Got it!", "Kick!", "Hehe!", "Again!", "Mine!", "Boing!"]
 DRINK_LINES = ["Glug glug!", "Hydrated!", "Good job!", "Sip sip~", "Yay, water!"]
 DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+# ---- MEDITATION ----
+MED_CHOICES = (1, 3, 5, 10)              # minutes
+BREATH = (("Breathe in...", 4), ("Hold...", 4), ("Breathe out...", 6))   # seconds per step
+MED_START_LINES = ["Let's breathe together~ \U0001F33F", "Okay... nice and slow~",
+                   "Getting comfy on my cushion~"]
+MED_END_LINES = ["That was lovely. Feeling a little calmer? \U0001F338",
+                 "Mmm... all done. Thank you for breathing with me~",
+                 "Nice and calm \u2665 You did great.",
+                 "Welcome back~ I hope your mind feels a little lighter."]
 
 # ---- BIRTHDAYS ----
 MONTHS = ["January", "February", "March", "April", "May", "June", "July",
@@ -2605,6 +2615,14 @@ class Pet(QWidget):
         self.dnd_days = list(DND_DAYS)
         self.birthdays = []               # [{"name", "month", "day"}] she reminds you of
         self.my_birthday = None           # {"month", "day"}: she celebrates you!
+        self.med_end = None               # meditation: when it ends
+        self.med_start = None
+        self.med_minutes_set = 0
+        self.med_guide = True             # "breathe in / hold / out" in her bubble
+        self.med_days = []                # dates she meditated with you (YYYY-MM-DD)
+        self.med_total = 0                # minutes, all time
+        self.med_pending = []             # reminders that waited until she was done
+        self.med_phase = -1
         self.sleep_hours_set = list(SLEEP_HOURS)
         self.apply_personal(PERSONAL)     # someone's own starting setup, if there is one
         self.text_size = "medium"
@@ -3038,6 +3056,8 @@ class Pet(QWidget):
             want = [("blink", 1)]
         elif time.time() < self.stretch_until and not self.dragging:
             want = [("stretch", 4), ("happy", 3)]
+        elif self.med_end and not self.dragging:
+            want = [("meditate", 6), ("sitfloor", 6)]
         elif self.movie_settled():
             want = [("sitfloor", 5)]
         elif self.floor_sit and not self.dragging:
@@ -3327,6 +3347,15 @@ class Pet(QWidget):
         menu.addAction("Say hi", self.poke)
         menu.addAction("Come here!", self.come_here)
 
+        if self.med_end:
+            menu.addAction("Stop meditating", lambda: self.stop_meditation(early=True))
+        else:
+            mm = menu.addMenu("Meditate \U0001F9D8")
+            for m in MED_CHOICES:
+                mm.addAction(minutes_label(m), lambda *a, m=m: self.start_meditation(m))
+            mm.addSeparator()
+            self.add_toggle(mm, "Breathing guide (in / hold / out)", self.med_guide, self.set_med_guide)
+            mm.addAction("My meditation stats", self.say_med_stats)
         if self.focus_end or self.break_end:
             menu.addAction("Stop timer", self.stop_focus)
         else:
@@ -4129,7 +4158,8 @@ class Pet(QWidget):
 
     def pick_idle_fun(self):
         """Pick something fun to do while idle. Returns True if she started something."""
-        if self.bed or self.streaming or self.focus_end or self.sleepy or self.reminder_active:
+        if (self.bed or self.streaming or self.focus_end or self.sleepy or self.reminder_active
+                or self.med_end):
             return False
         now = datetime.now()
         h = now.hour + now.minute / 60
@@ -4457,6 +4487,7 @@ class Pet(QWidget):
             else:
                 self.key_streak = 0
             if (self.key_streak == 4 and not self.activity and not self.bed and not self.streaming
+                    and not self.med_end
                     and not self.dragging and random.random() < 0.5):
                 self.start_activity("typing")
         # weather reports 3 times a day
@@ -4965,6 +4996,9 @@ class Pet(QWidget):
         self.say("Coming~", 1500)
 
     def remind(self, text):
+        if self.med_end:
+            self.med_pending.append(text)       # it'll wait until you're done breathing
+            return
         if "stretch" in text.lower():
             self.stretch_until = time.time() + 8
         if "water" in text.lower():
@@ -5243,7 +5277,9 @@ class Pet(QWidget):
                            "text_size": self.text_size, "outline": self.outline,
                            "glow_told": self.glow_told, "place": self.place, "units": self.units,
                            "dnd_days": self.dnd_days, "sleep_hours": self.sleep_hours_set,
-                           "birthdays": self.birthdays, "my_birthday": self.my_birthday}, f)
+                           "birthdays": self.birthdays, "my_birthday": self.my_birthday,
+                           "med_days": self.med_days[-400:], "med_total": self.med_total,
+                           "med_guide": self.med_guide}, f)
         except Exception:
             pass
 
@@ -5264,6 +5300,12 @@ class Pet(QWidget):
         if isinstance(d.get("birthdays"), list):
             self.birthdays = [b for b in (clean_birthday(x) for x in d["birthdays"]
                                           if isinstance(x, dict) and "name" in x) if b]
+        if isinstance(d.get("med_days"), list):
+            self.med_days = [str(x) for x in d["med_days"] if isinstance(x, str)][-400:]
+        if isinstance(d.get("med_total"), (int, float)):
+            self.med_total = int(d["med_total"])
+        if "med_guide" in d:
+            self.med_guide = bool(d["med_guide"])
         if "my_birthday" in d:
             mb = d["my_birthday"]
             self.my_birthday = clean_birthday(mb) if isinstance(mb, dict) else None
@@ -5389,6 +5431,172 @@ class Pet(QWidget):
         self.pomo = False
         self.say("Timer stopped. Nice try!", 2000)
 
+    # ----- meditation -----
+    def start_meditation(self, minutes):
+        if self.focus_end or self.break_end:
+            self.focus_end = self.break_end = None
+            self.pomo = False
+        if self.activity:
+            self.end_activity(quiet=True)
+        self.med_minutes_set = minutes
+        self.med_start = time.time()
+        self.med_end = self.med_start + minutes * 60
+        self.med_phase = -1
+        self.happy = 0
+        self.say(random.choice(MED_START_LINES), 3500)
+
+    def set_med_guide(self, value):
+        self.med_guide = value
+        self.save_custom()
+
+    def med_streak(self):
+        days = set(self.med_days)
+        d = date.today()
+        if d.isoformat() not in days:
+            d -= timedelta(days=1)            # today doesn't count yet: the streak still holds
+        n = 0
+        while d.isoformat() in days:
+            n += 1
+            d -= timedelta(days=1)
+        return n
+
+    def say_med_stats(self):
+        if not self.med_days:
+            self.say("We haven't meditated together yet~ Want to try a 1 minute one?", 4000)
+            return
+        n = self.med_streak()
+        days = len(set(self.med_days))
+        streak = (f"{n} day{'s' if n != 1 else ''} in a row! " if n > 1 else "")
+        self.say(f"{streak}{days} day{'s' if days != 1 else ''} of meditating together, "
+                 f"{self.med_total} minutes in all \U0001F33F", 6000)
+
+    def stop_meditation(self, early=False):
+        if not self.med_end:
+            return
+        done = (min(time.time(), self.med_end) - (self.med_start or time.time())) / 60
+        self.med_end = None
+        self.med_phase = -1
+        if done >= 1 or not early:
+            self.med_total += max(1, int(round(done)))
+            today = date.today().isoformat()
+            if today not in self.med_days:
+                self.med_days.append(today)
+            self.save_custom()
+        if early:
+            self.say("That's okay~ Every little breath counts \u2665", 3000)
+        else:
+            self.play_chime()
+            n = self.med_streak()
+            line = random.choice(MED_END_LINES)
+            if n > 1:
+                line += f"  ({n} days in a row!)"
+            self.say(line, 6000)
+            for _ in range(4):
+                self.hearts.append([random.randint(70, 150), 90, 0, "\u2665"])
+        if self.med_pending:
+            waiting, self.med_pending = self.med_pending, []
+            QTimer.singleShot(6500, lambda: self.remind("  \u2022  ".join(waiting)))
+
+    def check_meditation(self):
+        if not self.med_end:
+            return
+        now = time.time()
+        if now >= self.med_end:
+            self.stop_meditation()
+            return
+        if self.med_guide:
+            # cycle: in / hold / out, shown in her bubble
+            total = sum(sec for _, sec in BREATH)
+            t = (now - self.med_start) % total
+            i = 0
+            while t >= BREATH[i][1]:
+                t -= BREATH[i][1]
+                i += 1
+            if i != self.med_phase and now - self.med_start > 3.5:
+                self.med_phase = i
+                self.say(BREATH[i][0], int(BREATH[i][1] * 1000))
+
+    def breath_amount(self):
+        """0 (breathed out) .. 1 (full breath), following the in / hold / out steps."""
+        if not self.med_end or not self.med_start:
+            return 0.0
+        total = sum(sec for _, sec in BREATH)
+        t = (time.time() - self.med_start) % total
+        a, b, c = (sec for _, sec in BREATH)
+        if t < a:
+            x = t / a
+        elif t < a + b:
+            return 1.0
+        else:
+            x = 1 - (t - a - b) / c
+        return 0.5 - 0.5 * math.cos(math.pi * max(0.0, min(1.0, x)))
+
+    def draw_breath_glow(self, p):
+        """A soft glowing circle behind her that grows as you breathe in and shrinks as you breathe out."""
+        k = self.breath_amount()
+        r = 52 + 46 * k
+        c = QPointF(110, 150)
+        g = QRadialGradient(c, r)
+        g.setColorAt(0.0, QColor(214, 200, 255, int(70 + 60 * k)))
+        g.setColorAt(0.7, QColor(190, 176, 245, int(40 + 40 * k)))
+        g.setColorAt(1.0, QColor(190, 176, 245, 0))
+        p.save()
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(g))
+        p.drawEllipse(c, r, r)
+        p.setPen(QPen(QColor(170, 150, 235, int(90 + 80 * k)), 1.6))
+        p.setBrush(Qt.NoBrush)
+        p.drawEllipse(c, r * 0.86, r * 0.86)
+        p.restore()
+
+    def draw_zafu(self, p):
+        """Her meditation cushion, drawn under her until the 3D pictures arrive."""
+        p.save()
+        p.setPen(QPen(OUTLINE, 2))
+        p.setBrush(QBrush(QColor("#6c5aa8")))
+        p.drawRoundedRect(QRectF(52, 212, 116, 26), 12, 12)
+        p.setBrush(QBrush(QColor("#7a68b6")))
+        p.drawEllipse(QRectF(54, 204, 112, 18))
+        p.setPen(QPen(QColor(255, 255, 255, 50), 1.4))
+        for x in range(64, 160, 12):
+            p.drawLine(QPointF(x, 222), QPointF(x + 2, 236))
+        p.restore()
+
+    def play_chime(self):
+        """A soft two-note bell (falls back to the system sound)."""
+        try:
+            from PySide6.QtMultimedia import QSoundEffect
+            import tempfile
+            import wave
+            import struct
+            path = os.path.join(tempfile.gettempdir(), "digi_chime.wav")
+            if not os.path.exists(path):
+                rate = 44100
+                frames = []
+                for i in range(int(rate * 2.2)):
+                    t = i / rate
+                    v = 0.0
+                    for f0, start in ((784.0, 0.0), (1046.5, 0.35)):
+                        if t >= start:
+                            tt = t - start
+                            env = math.exp(-tt * 2.6)
+                            v += env * (math.sin(2 * math.pi * f0 * tt)
+                                        + 0.3 * math.sin(2 * math.pi * f0 * 2.01 * tt))
+                    frames.append(struct.pack("<h", int(max(-1, min(1, v * 0.22)) * 32767)))
+                with wave.open(path, "wb") as w:
+                    w.setnchannels(1)
+                    w.setsampwidth(2)
+                    w.setframerate(rate)
+                    w.writeframes(b"".join(frames))
+            if getattr(self, "chime", None) is None:
+                self.chime = QSoundEffect(self)
+                self.chime.setSource(QUrl.fromLocalFile(path))
+                self.chime.setVolume(0.6)
+            self.chime.play()
+        except Exception as ex:
+            print("chime:", ex, file=sys.stderr, flush=True)
+            QApplication.beep()
+
     def check_focus(self):
         now = time.time()
         if self.focus_end and now >= self.focus_end:
@@ -5511,7 +5719,7 @@ class Pet(QWidget):
             self.welcome(away)
 
     def welcome(self, away):
-        if not self.welcome_enabled or self.reminder_active or self.focus_end:
+        if not self.welcome_enabled or self.reminder_active or self.focus_end or self.med_end:
             return
         if away >= 3 * 3600:
             nm = (", " + self.nickname) if getattr(self, "nickname", "") else ""
@@ -5553,7 +5761,7 @@ class Pet(QWidget):
         if self.prev_steam is None:
             self.prev_steam, self.prev_game = steam, False
         quiet = ((not self.steam_enabled and not self.game_mode)
-                 or self.focus_end or self.sleep_hours or self.reminder_active)
+                 or self.focus_end or self.sleep_hours or self.reminder_active or self.med_end)
         now = time.time()
         if not quiet:
             if steam and not self.prev_steam and not game:
@@ -5774,7 +5982,7 @@ class Pet(QWidget):
     def check_app(self):
         if not ((HAS_APPKIT or (HELPER and W)) and self.react_enabled):
             return
-        if self.focus_end or self.sleep_hours:
+        if self.focus_end or self.sleep_hours or self.med_end:
             return
         try:
             if HELPER:
@@ -5908,7 +6116,7 @@ class Pet(QWidget):
 
     def check_mode(self):
         now = time.time()
-        blocked = (self.focus_end or self.sleep_hours or self.reminder_active
+        blocked = (self.focus_end or self.sleep_hours or self.reminder_active or self.med_end
                    or not self.wander or self.dragging or self.streaming
                    or self.ball is not None or self.falling)
         win = None
@@ -6082,6 +6290,8 @@ class Pet(QWidget):
             return
         if self.pose_now() and not self.activity:
             return
+        if self.med_end:
+            return                              # she stays put on her cushion
         if self.activity:
             self.do_activity_move()
             return
@@ -6233,7 +6443,7 @@ class Pet(QWidget):
         if self.idle_cd <= 0:
             if (not self.msg and not self.happy and not self.singing
                     and not self.sleepy and not self.focus_end
-                    and not self.streaming):
+                    and not self.streaming and not self.med_end):
                 if not self.activity and random.random() < 0.4 and self.pick_idle_fun():
                     pass
                 else:
@@ -6248,6 +6458,7 @@ class Pet(QWidget):
             self.check_reminders()
             self.check_timers()
             self.check_focus()
+            self.check_meditation()
             self.check_eye_rest()
             self.check_battery()
             self.update_tick()
@@ -6498,6 +6709,10 @@ class Pet(QWidget):
                 progress = (20 - self.jump) / 20.0
                 b -= int(35 * math.sin(math.pi * progress))
 
+        if self.med_end and not self.dragging:
+            self.draw_breath_glow(p)
+            if self.frames and "meditate" not in self.frames:
+                self.draw_zafu(p)
         # her body (dances when music plays)
         p.save()
         if clip is not None and not self.frames:
@@ -6584,7 +6799,10 @@ class Pet(QWidget):
 
         # timer label
         label = None
-        if self.focus_end:
+        if self.med_end:
+            left = max(0, int(self.med_end - time.time()))
+            label = f"breathe {left // 60}:{left % 60:02d}"
+        elif self.focus_end:
             left = max(0, int(self.focus_end - time.time()))
             name = "pomodoro" if self.pomo else "focus"
             label = f"{name} {left // 60}:{left % 60:02d}"
