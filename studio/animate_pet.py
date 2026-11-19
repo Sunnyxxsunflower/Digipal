@@ -1968,6 +1968,32 @@ def tuck_hair(hat_objs, depth=0.6):
                 bm.free()
                 bpy.data.meshes.remove(me)
                 continue
+            # a clean cut: the hair right at the edge of the snip slides onto the hat's surface,
+            # so the cut follows the hat smoothly instead of a jagged edge of whole triangles
+            cutset = set(cut)
+            mwi = mw.inverted()
+            for v in bm.verts:
+                if v in cutset:
+                    continue
+                outs = [e.other_vert(v) for e in v.link_edges if e.other_vert(v) in cutset]
+                if not outs:
+                    continue
+                p0 = mw @ v.co
+                best = None
+                for n in outs:
+                    p1 = mw @ n.co
+                    for tree, hw, hwi in hats:
+                        a0 = hwi @ p0
+                        d = (hwi @ p1) - a0
+                        if d.length < 1e-7:
+                            continue
+                        hit = tree.ray_cast(a0, d.normalized(), d.length)
+                        if hit[0] is not None:
+                            w = hw @ hit[0]
+                            if best is None or (w - p0).length < (best - p0).length:
+                                best = w
+                if best is not None:
+                    v.co = mwi @ best
             bmesh.ops.delete(bm, geom=cut, context="VERTS")   # snip it off (the rest is under the hat)
             bm.to_mesh(me)
             bm.free()
