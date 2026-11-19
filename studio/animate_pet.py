@@ -633,14 +633,15 @@ def beret_mesh(name):
             p = q @ (p - piv) + piv + Vector((0.02 * t, 0, 0))
             ring.append(bm.verts.new(p))
         rings.append(ring)
-    for ra, rb in zip(rings, rings[1:]):
+    for row, (ra, rb) in enumerate(zip(rings, rings[1:])):
         for i in range(N):
             j = (i + 1) % N
             if len(rb) == 1:
-                bm.faces.new((ra[i], ra[j], rb[0]))
+                f = bm.faces.new((ra[i], ra[j], rb[0]))
             else:
-                bm.faces.new((ra[i], ra[j], rb[j], rb[i]))
-    bm.faces.new(list(reversed(rings[0])))     # close the bottom (hidden inside her head)
+                f = bm.faces.new((ra[i], ra[j], rb[j], rb[i]))
+            f.material_index = 1 if row < nb else 0      # the band is a darker red
+    bm.faces.new(list(reversed(rings[0]))).material_index = 1     # close the bottom (inside her head)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
@@ -650,7 +651,10 @@ def beret_mesh(name):
     return o
 
 
-OUTFITS["beret"].append(hat_part(beret_mesh("Beret"), beret_red, BERET, (0, 0, 0)))
+beret_band = outfit_mat("of_beret_band", "#7a2a2e", 0.85)          # two shades darker than the top
+o = hat_part(beret_mesh("Beret"), beret_red, BERET, (0, 0, 0))
+o.data.materials.append(beret_band)
+OUTFITS["beret"].append(o)
 # TOP: the drooped cushion's own space (same tilt as the mesh), for the stalk and the leaf pin
 TOP = local_empty("BeretTop", BERET, (0.02, 0, BERET_PIVOT), BERET_DROOP)
 
