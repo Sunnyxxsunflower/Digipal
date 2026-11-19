@@ -577,10 +577,9 @@ for sx in (-1, 1):
 # brim is as wide as ours, in our own straw and ribbon colors.
 SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.8
-# the model's two floppy-brim poses (hat: Cloth / Cloth.001, band + ribbons: HatPos1 / HatPos2)
-SUNHAT_POSES = {"sunhat_floppy1": {"Cloth": 1.0, "HatPos1": 1.0},
-                "sunhat_floppy2": {"Cloth.001": 1.0, "HatPos2": 1.0}}
-SUNHAT_SHAPES = {}                       # the pose the real sun hat uses (empty: the plain one)
+SUNHAT_SHAPES = {}                       # the model's own poses are cloth falling onto a table: not used
+SUNHAT_CROWN_UP = 1.25                   # a taller crown, so the hat can sit lower over her hair
+SUNHAT_DROOP = (0.07, 0.08)              # brim droop at the edge: all around, plus extra at her sides
 
 
 def import_strawhat(path, keys=None):
@@ -637,6 +636,14 @@ def import_strawhat(path, keys=None):
                 k = 1.0
             q.x *= k
             q.y *= k
+        r = math.hypot(q.x, q.y)
+        edge = c * f                           # where the crown meets the brim
+        if r < edge * 1.02 and q.z > 0:
+            q.z *= SUNHAT_CROWN_UP
+        if r > edge * 1.05:                    # the brim curves gently down, more at her sides
+            t = min(1.0, (r - edge * 1.05) / (SUNHAT_BRIM_R - edge * 1.05))
+            side = (q.x / r) ** 2
+            q.z -= (SUNHAT_DROOP[0] + SUNHAT_DROOP[1] * side) * t ** 1.5
         return q
 
     for o in objs:
@@ -673,10 +680,7 @@ if os.path.exists(SUNHAT_BLEND):
     for o in OUTFITS["sunhat"]:
         bpy.data.objects.remove(o, do_unlink=True)
     OUTFITS["sunhat"] = import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES)
-    _args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    for _pose, _keys in SUNHAT_POSES.items():      # preview-only: try the floppy poses
-        if _pose in _args:
-            OUTFITS[_pose] = import_strawhat(SUNHAT_BLEND, _keys)
+    SUNHAT.location.z -= 0.10                      # sits lower, so her hair stays under the brim
 
 def rod(a, b, radius, mat, parent):
     """A thin bar from a to b (like stick(), which is defined further down)."""
