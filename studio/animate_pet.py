@@ -629,9 +629,11 @@ o.scale = (BERET_TOP[1], BERET_TOP[1] * 0.96, BERET_TOP[2])
 OUTFITS["beret"].append(hat_part(o, beret_red, TOP, (0, 0, 0)))                  # droops to her right
 # curved stalk: three little pieces bending over
 prev = Vector((0.04, 0.02, BERET_TOP[2] * 0.95))
+update()
+_tw = TOP.matrix_world.copy()                   # rod() works in world space
 for k, (dx, dz) in enumerate(((0.0, 0.07), (0.02, 0.05), (0.045, 0.025))):
     nxt = prev + Vector((dx, 0, dz))
-    OUTFITS["beret"].append(rod(tuple(prev), tuple(nxt), 0.022 - 0.004 * k, beret_red, TOP))
+    OUTFITS["beret"].append(rod(tuple(_tw @ prev), tuple(_tw @ nxt), 0.022 - 0.004 * k, beret_red, TOP))
     bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=6, radius=0.022 - 0.004 * k)
     OUTFITS["beret"].append(hat_part(made(), beret_red, TOP, tuple(nxt)))
     prev = nxt
