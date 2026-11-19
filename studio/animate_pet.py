@@ -527,6 +527,16 @@ HEART.rotation_euler = n.to_track_quat("Z", "Y").to_euler()
 OUTFITS["heart"].append(hat_part(heart_mesh("HeartClip", 0.0085, 0.06), heart_pink, HEART, (0, 0, 0)))
 
 # ---- round 3 accessories -------------------------------------------------------------------
+def local_empty(name, parent, loc=(0, 0, 0), rot=(0, 0, 0)):
+    e = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(e)
+    e.parent = parent
+    e.matrix_parent_inverse.identity()
+    e.location = loc
+    e.rotation_euler = rot
+    return e
+
+
 def on_head(n, dist, name):
     """A frame sitting on her head surface at direction n, facing out."""
     n = Vector(n).normalized()
@@ -538,27 +548,27 @@ def on_head(n, dist, name):
 # summer sun hat: a wide floppy straw brim, a rounded crown, a ribbon band with a little bow
 straw = prop_mat("of_straw", "#ecd393", 0.85, stripes="#d8b86a")
 ribbon_blue = outfit_mat("of_ribbon", "#7fb6e8", 0.5)
-SUNHAT = empty("SunHatFrame", (0.0, 0, 2.43), HEAD)
-SUNHAT.rotation_euler = (math.radians(7), math.radians(-6), 0)
-bpy.ops.mesh.primitive_cone_add(vertices=96, radius1=1.12, radius2=0.62, depth=0.13)
+SUNHAT = empty("SunHatFrame", (0.0, 0, 2.28), HEAD)            # pulled down over her hair
+SUNHAT.rotation_euler = (math.radians(6), math.radians(-5), 0)
+bpy.ops.mesh.primitive_cone_add(vertices=96, radius1=1.3, radius2=0.8, depth=0.14)
 o = made()
 bv = o.modifiers.new("Soft", "BEVEL")
-bv.width = 0.03
+bv.width = 0.035
 bv.segments = 3
 OUTFITS["sunhat"].append(hat_part(o, straw, SUNHAT, (0, 0, 0.0)))               # brim, sloping down
-bpy.ops.mesh.primitive_cylinder_add(vertices=72, radius=0.6, depth=0.3)
+bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=0.8, depth=0.5)
 o = made()
 bv = o.modifiers.new("Soft", "BEVEL")
-bv.width = 0.12
-bv.segments = 6
-OUTFITS["sunhat"].append(hat_part(o, straw, SUNHAT, (0, 0, 0.2)))                # rounded crown
-bpy.ops.mesh.primitive_cylinder_add(vertices=72, radius=0.615, depth=0.09)
-OUTFITS["sunhat"].append(hat_part(made(), ribbon_blue, SUNHAT, (0, 0, 0.1)))     # ribbon band
+bv.width = 0.18
+bv.segments = 8
+OUTFITS["sunhat"].append(hat_part(o, straw, SUNHAT, (0, 0, 0.28)))               # big rounded crown
+bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=0.815, depth=0.12)
+OUTFITS["sunhat"].append(hat_part(made(), ribbon_blue, SUNHAT, (0, 0, 0.13)))    # ribbon band
 for sx in (-1, 1):
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=0.09)
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=0.11)
     o = made()
     o.scale = (1.3, 0.5, 0.75)
-    OUTFITS["sunhat"].append(hat_part(o, ribbon_blue, SUNHAT, (0.42 + 0.09 * sx, -0.43, 0.11),
+    OUTFITS["sunhat"].append(hat_part(o, ribbon_blue, SUNHAT, (0.53 + 0.11 * sx, -0.56, 0.14),
                                       (0, math.radians(20 * sx), math.radians(-45))))
 
 # autumn beret with a little leaf pin
@@ -574,30 +584,92 @@ bpy.ops.mesh.primitive_torus_add(major_radius=0.5, minor_radius=0.05, major_segm
 OUTFITS["beret"].append(hat_part(made(), beret_red, BERET, (0, 0, -0.02)))       # the band
 bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.025, depth=0.08)
 OUTFITS["beret"].append(hat_part(made(), beret_red, BERET, (0, 0, 0.24)))        # the little stalk
-LEAF = on_head((-0.42, -0.62, 0.5), 0.63, "LeafPinFrame")
-bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
-o = made()
-o.scale = (0.08, 0.13, 0.025)
-OUTFITS["beret"].append(hat_part(o, leaf_orange, LEAF, (0, 0.02, 0.04), (0, 0, math.radians(-25))))
-bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.01, depth=0.08)
-OUTFITS["beret"].append(hat_part(made(), beret_red, LEAF, (0.03, -0.11, 0.04),
-                                 (math.radians(90), 0, math.radians(-25))))
+leaf_red = outfit_mat("of_leaf2", "#c2512b", 0.6)
+leaf_vein = outfit_mat("of_vein", "#8a3a1c", 0.6)
 
-# bunny ears: tall soft ears leaning out a little
+
+def leaf_mesh(name, length, width, thick):
+    """A pointed leaf, slightly toothed at the edge."""
+    import bmesh
+    bm = bmesh.new()
+    pts = []
+    N = 28
+    for k in range(N + 1):                       # one side, tip to stem
+        t = k / N
+        w = width * math.sin(math.pi * t) ** 0.85 * (1 + 0.08 * math.sin(t * math.pi * 7))
+        pts.append((w, length * (0.5 - t)))
+    for k in range(N - 1, 0, -1):                # the other side, back up
+        x, y = pts[k]
+        pts.append((-x, y))
+    vs = [bm.verts.new((x, y, 0)) for x, y in pts]
+    f = bm.faces.new(vs)
+    ext = bmesh.ops.extrude_face_region(bm, geom=[f])
+    moved = [e for e in ext["geom"] if isinstance(e, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=(0, 0, thick), verts=moved)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    bv = o.modifiers.new("Soft", "BEVEL")
+    bv.width = thick * 0.4
+    bv.segments = 3
+    bv.limit_method = "NONE"
+    return o
+
+
+# pinned on the front-right of the beret, facing out
+PIN = local_empty("LeafPinFrame", BERET, (0.36, -0.46, 0.13))
+PIN.rotation_euler = Vector((0.45, -0.75, 0.5)).normalized().to_track_quat("Z", "Y").to_euler()
+for k, (mat, ang, ln, wd) in enumerate(((leaf_orange, -30, 0.24, 0.075), (leaf_red, 25, 0.2, 0.065))):
+    fr = local_empty("Leaf%d" % k, PIN, (0, 0, 0.004 * k), (0, 0, math.radians(ang)))
+    OUTFITS["beret"].append(hat_part(leaf_mesh("Leaf%d" % k, ln, wd, 0.018), mat, fr, (0, 0.05, 0)))
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.006, depth=ln * 0.85)   # the vein
+    OUTFITS["beret"].append(hat_part(made(), leaf_vein, fr, (0, 0.06, 0.02), (math.radians(90), 0, 0)))
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.009, depth=0.07)        # the stem
+    OUTFITS["beret"].append(hat_part(made(), leaf_vein, fr, (0, -0.09, 0.01), (math.radians(90), 0, 0)))
+
+# bunny ears: the left one stands up, the right one folds over to the side near the top
 bunny_white = outfit_mat("of_bunny", "#fbf8ff", 0.8)
-for sx, lean in ((-1, 12), (1, 18)):
+for sx, lean in ((-1, 12), (1, 16)):
     ang = math.radians(16) * sx
     r = 0.5
     root = empty("BunnyEar%d" % sx, (r * math.sin(ang), 0.02, 2.015 + r * math.cos(ang)), HEAD)
     root.rotation_euler = (0, math.radians(lean) * sx, 0)
+    if sx < 0:
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
+        o = made()
+        o.scale = (0.14, 0.07, 0.43)
+        OUTFITS["bunny"].append(hat_part(o, bunny_white, root, (0, 0, 0.36)))
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
+        o = made()
+        o.scale = (0.075, 0.03, 0.3)
+        OUTFITS["bunny"].append(hat_part(o, ear_in, root, (0, -0.05, 0.38)))
+        continue
+    # lower half of the folding ear
     bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
     o = made()
-    o.scale = (0.14, 0.07, 0.43)
-    OUTFITS["bunny"].append(hat_part(o, bunny_white, root, (0, 0, 0.36)))
+    o.scale = (0.14, 0.07, 0.3)
+    OUTFITS["bunny"].append(hat_part(o, bunny_white, root, (0, 0, 0.28)))
     bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
     o = made()
-    o.scale = (0.075, 0.03, 0.3)
-    OUTFITS["bunny"].append(hat_part(o, ear_in, root, (0, -0.05, 0.38)))
+    o.scale = (0.075, 0.03, 0.2)
+    OUTFITS["bunny"].append(hat_part(o, ear_in, root, (0, -0.05, 0.3)))
+    # the fold: a soft round knuckle, then the top half bending over outward and down a bit
+    hinge = local_empty("BunnyHinge", root, (0, 0, 0.5), (0, math.radians(72), 0))
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
+    o = made()
+    o.scale = (0.135, 0.068, 0.11)
+    OUTFITS["bunny"].append(hat_part(o, bunny_white, hinge, (0, 0, 0)))
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
+    o = made()
+    o.scale = (0.13, 0.065, 0.2)
+    OUTFITS["bunny"].append(hat_part(o, bunny_white, hinge, (0, 0, 0.16)))
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
+    o = made()
+    o.scale = (0.065, 0.028, 0.13)
+    OUTFITS["bunny"].append(hat_part(o, ear_in, hinge, (0, -0.045, 0.18)))
 
 # round glasses: two gold rims over her eyes and a little bridge
 gold = outfit_mat("of_gold", "#e3b64e", 0.35)
@@ -637,7 +709,8 @@ OUTFITS["glasses"].append(rod((-0.13, -0.58, HEAD_C.z + EYE_Z + 0.03),
 
 # big hair bow on the top-left of her head
 bow_pink = outfit_mat("of_bow", "#f27fa8", 0.55)
-BOW = on_head((-0.5, -0.2, 0.84), 0.6, "BowFrame")
+BOW = empty("BowFrame", tuple(HEAD_C + Vector((0, -0.28, 0.96)).normalized() * 0.62), HEAD)
+BOW.rotation_euler = Vector((0, -0.75, 0.66)).normalized().to_track_quat("Z", "Y").to_euler()   # faces you
 for sx in (-1, 1):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
     o = made()
@@ -2127,6 +2200,7 @@ if OUTFITS_MODE:
     # the bigger hair styles get the Santa and witch hats a little lower and a bit bigger
     # (their own copy of those outfit frames, in outfit_santa-big / outfit_witch-big)
     BIG_HATS = {"santa": SANTA, "witch": WITCH, "sunhat": SUNHAT, "beret": BERET}
+    BIG_FIT = {"santa": (-0.08, 1.12), "witch": (-0.08, 1.12), "sunhat": (0.02, 1.04), "beret": (-0.03, 1.08)}
     BIG_STYLES = ("shaggy", "swept")
     for name, objs in OUTFITS.items():
         if pick and name not in pick:
@@ -2143,8 +2217,9 @@ if OUTFITS_MODE:
             if STYLE_PICK:
                 fr = BIG_HATS[name]
                 loc0, sc0 = fr.location.copy(), fr.scale.copy()
-                fr.location.z -= 0.08
-                fr.scale = (1.12, 1.12, 1.12)
+                dz, sc = BIG_FIT[name]
+                fr.location.z += dz
+                fr.scale = (sc, sc, sc)
                 tufts = [o for o in HAIRSTYLES["swept"] if o.name.startswith("SweptTuft")]
                 HAIRSTYLES["swept"] = [o for o in HAIRSTYLES["swept"] if o not in tufts]   # under the hat
                 CURRENT_OUTFIT = name + "-big"
