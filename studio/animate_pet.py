@@ -693,17 +693,17 @@ zafu_side = pleat_mat("zafu_side", "#6c5aa8", "#5a4a92")
 zafu_top = prop_mat("zafu_top", "#7a68b6", 0.8)
 zafu_btn = prop_mat("zafu_button", "#f2c86b", 0.5)
 z = []
-bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=0.56, depth=0.26, location=(0, 0.06, 0.13))
+bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=0.66, depth=0.3, location=(0, 0.06, 0.15))
 o = made()
 bv = o.modifiers.new("Soft", "BEVEL")
 bv.width = 0.09
 bv.segments = 8
 z.append(obj_part(o, zafu_side, None))
-bpy.ops.mesh.primitive_uv_sphere_add(segments=64, ring_count=24, radius=1, location=(0, 0.06, 0.25))
+bpy.ops.mesh.primitive_uv_sphere_add(segments=64, ring_count=24, radius=1, location=(0, 0.06, 0.29))
 o = made()
-o.scale = (0.53, 0.53, 0.09)                        # the puffy top
+o.scale = (0.63, 0.63, 0.12)                        # the puffy top
 z.append(obj_part(o, zafu_top, None))
-bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.035, location=(0, -0.2, 0.33))
+bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.04, location=(0, -0.58, 0.2))
 z.append(obj_part(made(), zafu_btn, None))           # the little button peeking out in front
 PROPS2["zafu"] = z
 
@@ -1765,21 +1765,21 @@ def render_states():
         tails(2 * w, 2 * w)
         shoot("sitfloor", i)
 
-    # meditate: sitting cross-legged on her zafu, hands resting on her knees, eyes softly closed,
-    # breathing slowly (a gentle rise and fall)
+    # meditate: kneeling on her zafu (legs tucked under, out of sight), hands resting on her lap,
+    # eyes softly closed, breathing slowly (a gentle rise and fall)
     for i in range(8):
         reset()
         w = wave(i, 8)
         show2("zafu")
         set_eyes("sleepy")
-        ROOT.location = (0, 0, -0.36 + 0.012 * w)          # sitting right on top of the cushion
+        ROOT.location = (0, 0, -0.30 + 0.012 * w)          # sitting right on top of the cushion
         for s in (-1, 1):
-            # legs fold forward and in, crossing at the ankles in front of the cushion
-            # (one a touch higher than the other so they cross instead of melting together)
-            LEG[s].rotation_euler = (math.radians(-(62 + 5 * s)), 0, math.radians(-s * 46))
-        # hands resting together in her lap
-        aim_arm(1, (0.11, -0.34, 0.66 + 0.01 * w))
-        aim_arm(-1, (-0.11, -0.34, 0.66 + 0.01 * w))
+            for o in LEG[s].children_recursive:             # legs tucked under her: hidden
+                if not o.hide_render:
+                    o.hide_render = True
+                    PEEK_HIDDEN.append(o)                    # reset() brings them back
+        aim_arm(1, (0.19, -0.36, 0.64 + 0.01 * w))
+        aim_arm(-1, (-0.19, -0.36, 0.64 + 0.01 * w))
         tilt(HEAD, 1.5 * w)
         tails(1.5 * w, 1.5 * w)
         shoot("meditate", i)
