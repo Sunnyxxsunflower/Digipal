@@ -177,7 +177,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 18                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 19                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -2675,6 +2675,20 @@ class Pet(QWidget):
         except Exception:
             return 1
 
+    def frame_patches(self, info):
+        """New outfit pictures that come as small add-on packs (newer than the pictures she has)."""
+        have = self.frames_version()
+        if int(info.get("frames_version", 1)) > have:
+            have = int(info.get("frames_version", 1))        # a full new set would come first
+        out = []
+        for p in info.get("frames_patches", []) or []:
+            try:
+                if int(p["version"]) > have and str(p["url"]).startswith("https://"):
+                    out.append(p)
+            except Exception:
+                pass
+        return sorted(out, key=lambda p: int(p["version"]))
+
     def fetch(self, url, timeout=20):
         import urllib.request
         req = urllib.request.Request(url + ("&" if "?" in url else "?") + "t=%d" % time.time(),
@@ -2716,7 +2730,7 @@ class Pet(QWidget):
             return
         newer = int(info.get("version", 0)) > APP_VERSION
         new_frames = int(info.get("frames_version", 1)) > self.frames_version()
-        if newer or new_frames:
+        if newer or new_frames or self.frame_patches(info):
             self.update_info = info
             self.say("\u2728 There's an update for me! Right-click me \u2192 Update Digi", 6000)
             self.happy = 30
@@ -2735,6 +2749,18 @@ class Pet(QWidget):
                                        "This update has new pictures for Digi (new looks!).\n"
                                        f"That's a big download (about {mb} MB).\n\nDownload them now?")
             get_frames = ans == QMessageBox.Yes
+        patches = self.frame_patches(info)
+        if patches and (get_frames or not new_frames):
+            mb = sum(int(p.get("mb", 100)) for p in patches)
+            ans = QMessageBox.question(None, "Update Digi",
+                                       "There are new outfits for Digi!\n"
+                                       f"They're a download of about {mb} MB.\n\nDownload them now?")
+            if ans != QMessageBox.Yes:
+                patches = []
+        else:
+            patches = []
+        if int(info.get("version", 0)) <= APP_VERSION and not get_frames and not patches:
+            return
         self.say("Updating... be right back! \U0001F527", 30000)
         self.update_progress = None
 
@@ -2742,6 +2768,8 @@ class Pet(QWidget):
             import tempfile
             import zipfile
             import shutil
+            import urllib.request
+            import urllib.parse
             here = self.code_dir()
             try:
                 # 1. her code: download everything first, then swap it in
@@ -2793,6 +2821,35 @@ class Pet(QWidget):
                         with open(os.path.join(old, "frames_version.txt"), "w") as f:
                             f.write(str(info.get("frames_version", 1)))
                         shutil.rmtree(trash, ignore_errors=True)
+                # 3. add-on outfit packs: unpacked INTO her pictures (nothing else is replaced)
+                for i, pk in enumerate(patches):
+                    self.update_progress = "Downloading new outfits..."
+                    zpath = os.path.join(tmp, "patch_%d.zip" % i)
+                    req = urllib.request.Request(pk["url"], headers={"User-Agent": "DigiPal"})
+                    with urllib.request.urlopen(req, timeout=60) as r, open(zpath, "wb") as f:
+                        total = int(r.headers.get("Content-Length") or 0)
+                        got = 0
+                        while True:
+                            chunk = r.read(1 << 20)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            got += len(chunk)
+                            if total:
+                                self.update_progress = f"Downloading new outfits... {got * 100 // total}%"
+                    self.update_progress = "Unpacking..."
+                    out = os.path.join(tmp, "patch_%d" % i)
+                    with zipfile.ZipFile(zpath) as z:
+                        for name in z.namelist():
+                            if ".." in name or name.startswith(("/", "\\")):
+                                raise RuntimeError("bad file in outfit pack")
+                        z.extractall(out)
+                    new = os.path.join(out, "pet_frames")
+                    if os.path.isdir(new):
+                        old = os.path.join(here, "pet_frames")
+                        shutil.copytree(new, old, dirs_exist_ok=True)
+                        with open(os.path.join(old, "frames_version.txt"), "w") as f:
+                            f.write(str(pk["version"]))
                 shutil.rmtree(tmp, ignore_errors=True)
                 self.update_progress = "done"
             except Exception as ex:
