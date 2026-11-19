@@ -594,21 +594,55 @@ leaf_orange = outfit_mat("of_leaf", "#e8833a", 0.6)
 # with a little curved stalk on top
 BERET = empty("BeretFrame", (0.06, 0.02, 2.3), HEAD)       # the band sits low, hugging her head
 BERET.rotation_euler = (math.radians(7), math.radians(6), 0)
-BERET_TOP = (0.21, 0.76, 0.21)                 # puff: center height, width, half-height
+BERET_R, BERET_ZC, BERET_HT, BERET_HB = 0.78, 0.25, 0.19, 0.11    # cushion: radius, center, top/bottom
+BERET_PIVOT = 0.13                             # where the band ends and the drooping top begins
+BERET_DROOP = (math.radians(-3), math.radians(-9), 0)
 
 
-def pillow(name):
-    """A unit sphere reshaped into a soft cushion: flatter top and bottom, thick rounded edge."""
+def beret_mesh(name):
+    """The whole beret as ONE smooth spun shape, so the band and the top can never come apart:
+    a straight headband that flows into a soft cushion top, which then droops to one side."""
     import bmesh
-    me = bpy.data.meshes.new(name)
+    from mathutils import Euler, Quaternion
+    prof = [(0.525, -0.05), (0.535, -0.03), (0.54, 0.02), (0.54, 0.07), (0.538, 0.10),
+            (0.532, 0.12)]                     # the band, straight up, tucking under the cushion
+    th0 = -math.acos(0.525 / BERET_R)
+    steps = 40
+    for k in range(1, steps + 1):              # cushion: underside out to the edge, over the top
+        th = th0 + (math.pi / 2 - th0) * k / steps
+        s = math.sin(th)
+        h = BERET_HT if s > 0 else BERET_HB
+        r = BERET_R * math.cos(th)
+        prof.append((max(r, 0.0), BERET_ZC + h * math.copysign(abs(s) ** 0.62, s)))
+    prof[-1] = (0.0, prof[-1][1])
+    q_full = Euler(BERET_DROOP).to_quaternion()
+    ident = Quaternion()
+    piv = Vector((0, 0, BERET_PIVOT))
+    N = 96
     bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=96, v_segments=48, radius=1.0)
-    for v in bm.verts:
-        x, y, z = v.co
-        zz = math.copysign(abs(z) ** 0.62, z)          # fuller edge, flatter top
-        if zz < 0:
-            zz *= 0.55                                  # the underside is flatter still
-        v.co = (x, y, zz)
+    rings = []
+    nb = 5                                     # band rows: bottom stays on her head, top tilts with the cushion
+    for idx, (r, z) in enumerate(prof):
+        t = min(1.0, idx / nb)                 # so the band is short on the drooping side, taller on the other
+        q = ident.slerp(q_full, t)
+        ring = []
+        cnt = 1 if r == 0 else N
+        for i in range(cnt):
+            a = 2 * math.pi * i / N
+            p = Vector((r * math.cos(a), r * math.sin(a), z))
+            p = q @ (p - piv) + piv + Vector((0.02 * t, 0, 0))
+            ring.append(bm.verts.new(p))
+        rings.append(ring)
+    for ra, rb in zip(rings, rings[1:]):
+        for i in range(N):
+            j = (i + 1) % N
+            if len(rb) == 1:
+                bm.faces.new((ra[i], ra[j], rb[0]))
+            else:
+                bm.faces.new((ra[i], ra[j], rb[j], rb[i]))
+    bm.faces.new(list(reversed(rings[0])))     # close the bottom (hidden inside her head)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()
     o = bpy.data.objects.new(name, me)
@@ -616,22 +650,15 @@ def pillow(name):
     return o
 
 
-band = local_empty("BeretBand", BERET)
-bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=0.54, depth=0.16)
-o = made()
-bv = o.modifiers.new("Soft", "BEVEL")
-bv.width = 0.03
-bv.segments = 4
-OUTFITS["beret"].append(hat_part(o, beret_red, band, (0, 0, 0.05)))             # the headband
-TOP = local_empty("BeretTop", BERET, (0.02, 0, BERET_TOP[0]), (math.radians(-3), math.radians(-9), 0))
-o = pillow("BeretPuff")
-o.scale = (BERET_TOP[1], BERET_TOP[1] * 0.96, BERET_TOP[2])
-OUTFITS["beret"].append(hat_part(o, beret_red, TOP, (0, 0, 0)))                  # droops to her right
-# curved stalk: little pieces bending over, rooted inside the top of the puff
+OUTFITS["beret"].append(hat_part(beret_mesh("Beret"), beret_red, BERET, (0, 0, 0)))
+# TOP: the drooped cushion's own space (same tilt as the mesh), for the stalk and the leaf pin
+TOP = local_empty("BeretTop", BERET, (0.02, 0, BERET_PIVOT), BERET_DROOP)
+
+
 def puff_z(x, y):
-    """Height of the beret's top surface at (x, y), in the puff's own space."""
-    r = min(0.999, math.hypot(x, y) / BERET_TOP[1])
-    return BERET_TOP[2] * (1 - r * r) ** 0.31
+    """Height of the beret's top surface at (x, y), in TOP's space."""
+    r = min(0.999, math.hypot(x, y) / BERET_R)
+    return BERET_ZC - BERET_PIVOT + BERET_HT * (1 - r * r) ** 0.31
 
 
 pts = [Vector((0.03, 0.02, puff_z(0.03, 0.02) - 0.03))]
