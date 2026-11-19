@@ -588,13 +588,13 @@ def rod(a, b, radius, mat, parent):
 
 # autumn beret with a little leaf pin
 beret_red = outfit_mat("of_beret", "#702124", 0.8)       # the studio lights lift it to about #a23b3f
-leaf_orange = outfit_mat("of_leaf", "#d39a5e", 0.6)     # renders a soft peach
+leaf_orange = outfit_mat("of_leaf", "#e8833a", 0.6)
 # a felt beret like Nancy's reference: a short straight headband, and a big soft pillowy top that
 # overhangs it, drooping down on one side (you can see the band under the other side),
 # with a little curved stalk on top
 BERET = empty("BeretFrame", (0.06, 0.02, 2.3), HEAD)       # the band sits low, hugging her head
 BERET.rotation_euler = (math.radians(7), math.radians(6), 0)
-BERET_R, BERET_ZC, BERET_HT, BERET_HB = 0.78, 0.24, 0.15, 0.09    # cushion: radius, center, top/bottom
+BERET_R, BERET_ZC, BERET_HT, BERET_HB = 0.78, 0.25, 0.19, 0.11    # cushion: radius, center, top/bottom
 BERET_PIVOT = 0.13                             # where the band ends and the drooping top begins
 BERET_DROOP = (math.radians(-3), math.radians(-9), 0)
 
@@ -678,7 +678,7 @@ for k in range(len(pts) - 1):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=6, radius=rad)
     OUTFITS["beret"].append(hat_part(made(), beret_red, TOP, tuple(p1)))
 
-leaf_red = outfit_mat("of_leaf2", "#b8644a", 0.6)       # renders a soft salmon
+leaf_red = outfit_mat("of_leaf2", "#c2512b", 0.6)
 leaf_vein = outfit_mat("of_vein", "#8a3a1c", 0.6)
 gold_pin = outfit_mat("of_goldpin", "#d8cc78", 0.45)    # pale butter yellow
 
