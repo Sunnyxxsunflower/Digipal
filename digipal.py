@@ -19,7 +19,8 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QListWidgetItem, QPushButton, QLabel, QLineEdit,
                                QTimeEdit, QCheckBox, QMessageBox, QGridLayout,
                                QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
-                               QScrollArea, QComboBox, QSpinBox, QLayout, QStackedWidget)
+                               QScrollArea, QComboBox, QSpinBox, QLayout, QStackedWidget,
+                               QGraphicsView, QGraphicsScene)
 from PySide6.QtCore import QTime, QRect, QSize, QPoint
 
 IS_WIN = sys.platform == "win32"
@@ -177,7 +178,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 19                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 20                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -288,7 +289,9 @@ class Ball(QWidget):
 
     def __init__(self, area, x, y):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(self.SIZE, self.SIZE)
         self.area = area
@@ -381,7 +384,9 @@ class Die(QWidget):
 
     def __init__(self, area, x, y, vx, vy, floor, sides, result):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.resize(self.SIZE, self.SIZE)
@@ -509,7 +514,9 @@ class TarotCard(QWidget):
 
     def __init__(self, x, y, card, reversed_, on_click):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(self.W, self.H)
         self.card, self.rev, self.on_click = card, reversed_, on_click
@@ -571,7 +578,9 @@ class Snack(QWidget):
 
     def __init__(self, x, y, emoji, on_bite):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(self.SIZE, self.SIZE)
         self.emoji, self.on_bite = emoji, on_bite
@@ -633,7 +642,9 @@ class Bomb(QWidget):
 
     def __init__(self, area, x, y, vx, vy, floor):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.resize(self.SIZE, self.SIZE)
@@ -746,7 +757,9 @@ class SandCastle(QWidget):
 
     def __init__(self, x, y, on_break, on_done):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(self.W, self.H)
         self.on_break, self.on_done = on_break, on_done
@@ -903,7 +916,9 @@ class SoapBubble(QWidget):
 
     def __init__(self, x, y, on_pop):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.r = random.randint(14, 26)
         self.S = self.r * 2 + 16
@@ -967,7 +982,9 @@ class CrystalBall(QWidget):
 
     def __init__(self, x, y, on_click):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(self.W, self.H)
         self.on_click = on_click
@@ -1029,7 +1046,9 @@ class Bouquet(QWidget):
 
     def __init__(self, x, y, on_take):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(self.W, self.H)
         self.on_take = on_take
@@ -1103,7 +1122,8 @@ HAIR_COLORS = [
 ROOM_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "digi_room.png")
 ROOM_SIZE = (2000, 1500)                 # the drawing's size; spots below are in its pixels
 ROOM_SCREEN = (1292, 196, 532, 1150)     # the phone's white screen: x, y, w, h
-ROOM_DIGI = (700, 1400, 940)             # where Digi stands on the rug: center x, feet y, height
+ROOM_DIGI = (700, 1400, 940) 
+ROOM_TILT = 1.5                          # degrees: the phone in the drawing leans a little to the right            # where Digi stands on the rug: center x, feet y, height
 
 
 class FlowLayout(QLayout):
@@ -1228,8 +1248,21 @@ class CustomizeDialog(QDialog):
             for sc in (look_scroll, personal_scroll):
                 sc.setStyleSheet("QScrollArea { background: white; border: none; } "
                                  "QScrollArea > QWidget > QWidget { background: white; }")
-            self.phone = QWidget(self)
+            self.phone = QWidget()
             self.phone.setObjectName("phone")
+            # the phone screen is tilted like the drawn phone: its real buttons live in a tiny
+            # graphics scene that's turned by ROOM_TILT degrees (clicks and scrolling still work)
+            self.phone_scene = QGraphicsScene(self)
+            self.phone_proxy = self.phone_scene.addWidget(self.phone)
+            self.phone_view = QGraphicsView(self.phone_scene, self)
+            self.phone_view.setFrameShape(QFrame.NoFrame)
+            self.phone_view.setStyleSheet("QGraphicsView { background: transparent; border: none; }")
+            self.phone_view.viewport().setAutoFillBackground(False)
+            self.phone_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.phone_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.phone_view.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+            self.phone_view.setRenderHints(QPainter.Antialiasing | QPainter.TextAntialiasing
+                                           | QPainter.SmoothPixmapTransform)
             self.phone.setStyleSheet("QWidget#phone { background: white; }")
             pl = QVBoxLayout(self.phone)
             pl.setContentsMargins(4, 0, 4, 0)
@@ -1428,6 +1461,7 @@ class CustomizeDialog(QDialog):
                                             background: #7389b0; color: white; font-weight: bold; }
                 QPushButton[class="done"]:hover { background: #637aa3; }
             """)
+            self.phone.setStyleSheet(self.styleSheet() + " QWidget#phone { background: white; }")
         else:
             done = QPushButton("Done")
             done.setStyleSheet("QPushButton { padding: 6px 22px; border-radius: 8px; background: #a99be0; "
@@ -1474,7 +1508,15 @@ class CustomizeDialog(QDialog):
             return
         k = self.room_k()
         x, y, w, h = ROOM_SCREEN
-        self.phone.setGeometry(int(x * k), int(y * k), int(w * k), int(h * k))
+        pw_, ph_ = int(w * k), int(h * k)
+        pad = int(ph_ * math.sin(math.radians(abs(ROOM_TILT)))) + 4    # room for the turned corners
+        self.phone.resize(pw_, ph_)
+        self.phone_proxy.setTransformOriginPoint(pw_ / 2, ph_ / 2)
+        self.phone_proxy.setRotation(ROOM_TILT)
+        self.phone_proxy.setPos(pad, pad)
+        self.phone_scene.setSceneRect(0, 0, pw_ + 2 * pad, ph_ + 2 * pad)
+        self.phone_view.setSceneRect(0, 0, pw_ + 2 * pad, ph_ + 2 * pad)
+        self.phone_view.setGeometry(int(x * k) - pad, int(y * k) - pad, pw_ + 2 * pad, ph_ + 2 * pad)
         cx, feet, tall = ROOM_DIGI
         ph = int(tall * k)
         pw = int(ph * 220 / 260)
@@ -2440,7 +2482,9 @@ class RoomBubble(BubbleWin):
 class Pet(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | TOOL_FLAG
+                            | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)    # never steal your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(220, 240)
         # while she's held and swinging, her window grows by this much so she isn't cut off;
@@ -4911,7 +4955,6 @@ class Pet(QWidget):
         self.reminder_active = True
         self.happy = 0
         self.say(text, 15000)
-        self.raise_()
         QApplication.beep()
 
     def next_outfit(self):
@@ -5459,7 +5502,6 @@ class Pet(QWidget):
             self.say(random.choice(WELCOME_LINES), 3500)
         self.happy = 40
         self.jump = 20
-        self.raise_()
         for _ in range(3):
             self.hearts.append([random.randint(80, 140), 90, 0, "\u2665"])
 
