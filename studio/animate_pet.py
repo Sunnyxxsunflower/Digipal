@@ -599,12 +599,12 @@ BERET_PIVOT = 0.13                             # where the band ends and the dro
 BERET_DROOP = (math.radians(-3), math.radians(-9), 0)
 
 
-def beret_mesh(name):
+def beret_mesh(name, hc=None):
     """The whole beret as ONE smooth spun shape, so the band and the top can never come apart:
     a straight headband that flows into a soft cushion top, which then droops to one side."""
     import bmesh
     from mathutils import Euler, Quaternion
-    prof = [(0.525, -0.05), (0.535, -0.03), (0.54, 0.02), (0.54, 0.07), (0.538, 0.10),
+    prof = [(0.47, -0.16), (0.50, -0.11), (0.515, -0.07), (0.525, -0.05), (0.535, -0.03), (0.54, 0.02), (0.54, 0.07), (0.538, 0.10),
             (0.532, 0.12)]                     # the band, straight up, tucking under the cushion
     th0 = -math.acos(0.525 / BERET_R)
     steps = 40
@@ -621,9 +621,10 @@ def beret_mesh(name):
     N = 96
     bm = bmesh.new()
     rings = []
-    nb = 5                                     # band rows: bottom stays on her head, top tilts with the cushion
+    nb = 8                                     # band rows (the first 3 tuck down inside her head)
     for idx, (r, z) in enumerate(prof):
-        t = min(1.0, idx / nb)                 # so the band is short on the drooping side, taller on the other
+        t = min(1.0, max(0, idx - 3) / 5)      # bottom stays on her head, top tilts with the cushion:
+                                               # so the band is short on the drooping side, taller on the other
         q = ident.slerp(q_full, t)
         ring = []
         cnt = 1 if r == 0 else N
@@ -643,6 +644,46 @@ def beret_mesh(name):
             f.material_index = 1 if row < nb else 0      # the band is a darker red
     bm.faces.new(list(reversed(rings[0]))).material_index = 1     # close the bottom (inside her head)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    line = []                                  # where the band meets her head, all the way around
+    if hc is not None:
+        for i in range(N):
+            col = [rings[k][i].co.copy() for k in range(nb + 14)]     # band, then the cushion's underside
+            hit = col[0]
+            for k in range(1, len(col)):
+                d0, d1 = (col[k - 1] - hc).length, (col[k] - hc).length
+                if d0 <= HEAD_R < d1:
+                    f = (HEAD_R - d0) / (d1 - d0)
+                    hit = col[k - 1].lerp(col[k], f)
+                    break
+            out = Vector((hit.x, hit.y, 0)).normalized()
+            line.append(hit + out * 0.004)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    return o, line
+
+
+def ring_tube(name, pts, rad, sides=6):
+    """A thin closed tube through pts: a drawn-on outline line."""
+    import bmesh
+    bm = bmesh.new()
+    n = len(pts)
+    circ = []
+    for i in range(n):
+        p, tan = pts[i], (pts[(i + 1) % n] - pts[i - 1]).normalized()
+        side = tan.cross(Vector((0, 0, 1))).normalized()
+        up = side.cross(tan).normalized()
+        circ.append([bm.verts.new(p + (side * math.cos(2 * math.pi * k / sides) +
+                                       up * math.sin(2 * math.pi * k / sides)) * rad)
+                     for k in range(sides)])
+    for i in range(n):
+        a, b = circ[i], circ[(i + 1) % n]
+        for k in range(sides):
+            m = (k + 1) % sides
+            bm.faces.new((a[k], a[m], b[m], b[k]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()
@@ -652,9 +693,13 @@ def beret_mesh(name):
 
 
 beret_band = outfit_mat("of_beret_band", "#6b1b1e", 0.85)          # renders about #7a2a2e, darker than the top
-o = hat_part(beret_mesh("Beret"), beret_red, BERET, (0, 0, 0))
+update()
+o, _line = beret_mesh("Beret", BERET.matrix_world.inverted() @ HEAD_C)
+o = hat_part(o, beret_red, BERET, (0, 0, 0))
 o.data.materials.append(beret_band)
 OUTFITS["beret"].append(o)
+line_black = outfit_mat("of_line", "#141014", 0.9)
+OUTFITS["beret"].append(hat_part(ring_tube("BeretEdgeLine", _line, 0.006), line_black, BERET, (0, 0, 0)))
 # TOP: the drooped cushion's own space (same tilt as the mesh), for the stalk and the leaf pin
 TOP = local_empty("BeretTop", BERET, (0.02, 0, BERET_PIVOT), BERET_DROOP)
 
