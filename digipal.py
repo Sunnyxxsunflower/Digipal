@@ -182,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 25                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 26                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1585,6 +1585,7 @@ class CustomizeDialog(QDialog):
         self.anim_k = getattr(self, "anim_k", 0) + 1
         try:
             self.update_preview()
+            self.update_listen_button()
             if self.in_room:
                 self.room_bubble.follow()
         except Exception as ex:
@@ -1598,6 +1599,7 @@ class CustomizeDialog(QDialog):
     def hideEvent(self, e):
         super().hideEvent(e)
         self.anim.stop()
+        self.pet.preview_until = 0             # closing Customize stops a sample
 
     def paintEvent(self, e):
         if self.in_room:
@@ -1630,7 +1632,7 @@ class CustomizeDialog(QDialog):
         self.med_at.timeChanged.connect(lambda *a: self.pick_med_time())
 
         col.addWidget(self.heading("Background sound"))
-        lab = QLabel("Plays softly while you meditate. Tap one to listen.")
+        lab = QLabel("Plays softly only while you meditate. Pick one, then press Listen to hear a sample.")
         lab.setWordWrap(True)
         col.addWidget(lab)
         row = self.hrow()
@@ -1640,6 +1642,12 @@ class CustomizeDialog(QDialog):
             b.clicked.connect(lambda *a, k=key: self.pick_med_sound(k))
             self.sound_buttons[key] = b
             row.addWidget(b)
+        col.addLayout(row)
+        row = self.hrow()
+        self.listen_btn = QPushButton("\u25B6 Listen (5 sec)")
+        self.listen_btn.setProperty("class", "opt")
+        self.listen_btn.clicked.connect(lambda *a: self.listen())
+        row.addWidget(self.listen_btn)
         col.addLayout(row)
         row = self.hrow()
         row.addWidget(QLabel("Volume"))
@@ -1678,12 +1686,30 @@ class CustomizeDialog(QDialog):
     def pick_med_sound(self, key):
         self.pet.med_sound = key
         self.pet.save_custom()
-        self.pet.preview_med_sound(key)
+        if time.time() < self.pet.preview_until:      # a sample was playing: switch it to this one
+            self.pet.preview_until = 0
+            if key != "none":
+                self.pet.listen_sample(key)
         self.refresh()
+
+    def listen(self):
+        key = self.pet.med_sound
+        if key == "none":
+            self.pet.say("Pick a sound first, then press Listen~", 2500)
+            return
+        self.pet.listen_sample(key)
+        self.update_listen_button()
+
+    def update_listen_button(self):
+        if not hasattr(self, "listen_btn"):
+            return
+        playing = time.time() < self.pet.preview_until
+        txt = "\u25A0 Stop" if playing else "\u25B6 Listen (5 sec)"
+        if self.listen_btn.text() != txt:
+            self.listen_btn.setText(txt)
 
     def pick_med_volume(self, v):
         self.pet.med_volume = v / 100
-        self.pet.set_med_volume()
         self.pet.save_custom()
 
     def pick_med_guide(self, k):
@@ -2785,7 +2811,10 @@ class Pet(QWidget):
         self.med_sound = "none"           # background sound while meditating
         self.med_volume = 0.5
         self.sound_player = None
-        self.sound_fade = None
+        self.sound_key = None
+        self.preview_key = None
+        self.preview_start = 0.0
+        self.preview_until = 0.0
         self.med_time = None              # "HH:MM": she invites you to meditate every day at this time
         self.med_asked_day = None         # the day she already asked (and you said no / did it)
         self.med_ask_at = None            # "Later": ask again at this time
@@ -5628,7 +5657,7 @@ class Pet(QWidget):
         self.med_phase = -1
         self.happy = 0
         self.say(random.choice(MED_START_LINES), 3500)
-        self.play_med_sound(self.med_sound)
+        self.preview_until = 0
 
     def show_choices(self, options, on_pick):
         if self.choice_bar is not None:
@@ -5762,7 +5791,6 @@ class Pet(QWidget):
             return
         self.close_choices()
         self.med_awaiting_more = False
-        self.stop_med_sound()
         done = (min(time.time(), self.med_end) - (self.med_start or time.time())) / 60
         self.med_end = None
         self.med_phase = -1
@@ -5858,87 +5886,75 @@ class Pet(QWidget):
         p.restore()
 
     # ----- calm background sounds -----
+    # One simple rule, checked every tick: a sound plays ONLY while you're meditating or while
+    # you're listening to a short sample in Customize. Anything else fades it out and stops it.
     def sound_file(self, key):
         path = os.path.join(self.code_dir(), "sounds", key + ".wav")
         return path if os.path.exists(path) else None
 
-    def play_med_sound(self, key, fade_in=3.0, stop_after=None):
-        """Loop one of the calm sounds, fading in. stop_after: seconds (a short listen)."""
-        self.stop_med_sound(fade=0)
-        path = self.sound_file(key) if key and key != "none" else None
-        if not path:
-            return
-        try:
-            from PySide6.QtMultimedia import QSoundEffect
-            sp = QSoundEffect(self)
-            sp.setSource(QUrl.fromLocalFile(path))
-            try:
-                sp.setLoopCount(QSoundEffect.Loop.Infinite.value)
-            except Exception:
-                sp.setLoopCount(-2)
-            sp.setVolume(0.0)
-            sp.play()
-            self.sound_player = sp
-            self.fade_sound_to(self.med_volume, fade_in)
-            if stop_after:
-                QTimer.singleShot(int(stop_after * 1000),
-                                  lambda s=sp: self.stop_med_sound(fade=1.5) if self.sound_player is s
-                                  and not self.med_end else None)
-        except Exception as ex:
-            print("sound:", ex, file=sys.stderr, flush=True)
+    def listen_sample(self, key, secs=5.0):
+        """A little sound bite in Customize (call again to stop it early)."""
+        now = time.time()
+        if now < self.preview_until and self.preview_key == key:
+            self.preview_until = 0                 # tapped again: stop
+            return False
+        self.preview_key = key
+        self.preview_start = now
+        self.preview_until = now + secs
+        return True
 
-    def fade_sound_to(self, target, secs, then_stop=False, sp=None):
-        sp = sp or self.sound_player
-        if sp is None:
-            return
-        if not then_stop and self.sound_fade is not None:
-            self.sound_fade.stop()
-        steps = max(1, int(secs * 20))
-        start = sp.volume()
-        state = {"i": 0}
-        tm = QTimer(self)
-
-        def step():
-            state["i"] += 1
-            try:
-                sp.setVolume(start + (target - start) * min(1.0, state["i"] / steps))
-            except Exception:
-                tm.stop()
-                return
-            if state["i"] >= steps:
-                tm.stop()
-                tm.deleteLater()
-                if then_stop:
-                    sp.stop()
-                    sp.deleteLater()
-        tm.timeout.connect(step)
-        tm.start(50)
-        if not then_stop:
-            self.sound_fade = tm
-
-    def stop_med_sound(self, fade=2.5):
+    def update_sound(self):
+        now = time.time()
+        key, level = None, 0.0
+        if self.med_end and self.med_sound != "none" and not self.med_asking:
+            key = self.med_sound
+            level = self.med_volume * min(1.0, (now - (self.med_start or now)) / 3.0)   # 3s fade in
+        elif now < self.preview_until and self.preview_key not in (None, "none"):
+            key = self.preview_key
+            fade_in = min(1.0, (now - self.preview_start) / 0.4)
+            fade_out = min(1.0, (self.preview_until - now) / 1.0)
+            level = self.med_volume * min(fade_in, fade_out)
         sp = self.sound_player
-        if sp is None:
+        if key is None:
+            if sp is not None:
+                v = sp.volume() - 0.025                    # fade out, then stop for good
+                if v <= 0.01:
+                    self.kill_sound()
+                else:
+                    sp.setVolume(v)
             return
-        self.sound_player = None
-        if self.sound_fade is not None:
-            self.sound_fade.stop()
-            self.sound_fade = None
-        if fade:
-            self.fade_sound_to(0.0, fade, then_stop=True, sp=sp)     # fades out on its own
-        else:
-            sp.stop()
-            sp.deleteLater()
+        if sp is None or self.sound_key != key:
+            self.kill_sound()
+            path = self.sound_file(key)
+            if not path:
+                return
+            try:
+                from PySide6.QtMultimedia import QSoundEffect
+                sp = QSoundEffect(self)
+                sp.setSource(QUrl.fromLocalFile(path))
+                try:
+                    sp.setLoopCount(QSoundEffect.Loop.Infinite.value)
+                except Exception:
+                    sp.setLoopCount(-2)
+                sp.setVolume(0.0)
+                sp.play()
+                self.sound_player, self.sound_key = sp, key
+            except Exception as ex:
+                print("sound:", ex, file=sys.stderr, flush=True)
+                self.med_sound_broken = True
+                return
+        v = sp.volume()
+        sp.setVolume(v + max(-0.03, min(0.03, level - v)))    # glide toward the level
 
-    def set_med_volume(self):
-        if self.sound_player is not None:
-            self.sound_player.setVolume(self.med_volume)
-
-    def preview_med_sound(self, key):
-        if self.med_end:                    # meditating: switch the sound for real
-            self.play_med_sound(key, fade_in=1.5)
-        else:
-            self.play_med_sound(key, fade_in=0.8, stop_after=6)
+    def kill_sound(self):
+        sp = self.sound_player
+        self.sound_player, self.sound_key = None, None
+        if sp is not None:
+            try:
+                sp.stop()
+                sp.deleteLater()
+            except Exception:
+                pass
 
     def play_chime(self):
         """A soft two-note bell (falls back to the system sound)."""
@@ -6711,6 +6727,7 @@ class Pet(QWidget):
             self.bubble_win.follow()
             if self.choice_bar is not None:
                 self.choice_bar.follow()
+            self.update_sound()
         except Exception as ex:
             print("bubble:", ex, file=sys.stderr, flush=True)
 
