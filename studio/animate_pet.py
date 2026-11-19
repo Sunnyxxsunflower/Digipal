@@ -577,9 +577,9 @@ for sx in (-1, 1):
 # brim is as wide as ours, in our own straw and ribbon colors.
 SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.8
-SUNHAT_SHAPES = {}                       # the model's own poses are cloth falling onto a table: not used
-SUNHAT_CROWN_UP = 1.25                   # a taller crown, so the hat can sit lower over her hair
-SUNHAT_DROOP = (0.07, 0.08)              # brim droop at the edge: all around, plus extra at her sides
+SUNHAT_SHAPES = {"Cloth.001": 1.0, "HatPos2": 1.0}   # the model's droopy pose (Nancy's pick)
+SUNHAT_CROWN_UP = 1.0                    # (taller crown: not needed, her hair tucks under instead)
+SUNHAT_DROOP = (0.0, 0.0)                # (extra brim droop: not needed with the droopy pose)
 
 
 def import_strawhat(path, keys=None):
@@ -680,7 +680,6 @@ if os.path.exists(SUNHAT_BLEND):
     for o in OUTFITS["sunhat"]:
         bpy.data.objects.remove(o, do_unlink=True)
     OUTFITS["sunhat"] = import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES)
-    SUNHAT.location.z -= 0.10                      # sits lower, so her hair stays under the brim
 
 def rod(a, b, radius, mat, parent):
     """A thin bar from a to b (like stick(), which is defined further down)."""
@@ -1920,6 +1919,60 @@ scene.cycles.samples = 24
 
 
 # ------------------------------------------------------------- posing helpers
+# hats that tuck her hair under them: any hair poking up through the hat gets pressed down just
+# under it (only while that hat's frames render), so it looks like the hair is hiding under the hat
+HAIR_TUCK = {"sunhat"}
+
+
+def tuck_hair(hat_objs, depth=0.4, margin=0.03):
+    from mathutils.bvhtree import BVHTree
+    reset()
+    update()
+    deps = bpy.context.evaluated_depsgraph_get()
+    hats = [(BVHTree.FromObject(h, deps), h.matrix_world.copy(), h.matrix_world.inverted()) for h in hat_objs
+            if h.type == "MESH" and any(sl.material is not None and sl.material.name.startswith("of_straw")
+                                        for sl in h.material_slots)]    # the hat itself, not its ribbons
+    saved, seen = [], set()
+    for objs in HAIRSTYLES.values():
+        for o in objs:
+            if o.type != "MESH" or o.name in seen:
+                continue
+            seen.add(o.name)
+            me = bpy.data.meshes.new_from_object(o.evaluated_get(deps))   # modifiers baked in
+            mw = o.matrix_world.copy()
+            mwi = mw.inverted()
+            moved = 0
+            for v in me.vertices:
+                p = mw @ v.co
+                for tree, hw, hwi in hats:
+                    q = hwi @ p
+                    hit = tree.ray_cast(q, Vector((0, 0, -1)), depth)
+                    if hit[0] is not None:          # the hat is right below: this bit pokes out
+                        q2 = Vector((q.x, q.y, hit[0].z - margin))
+                        p = hw @ q2
+                        moved += 1
+                v.co = mwi @ p
+            if not moved:
+                bpy.data.meshes.remove(me)
+                continue
+            mods = [(m, m.show_render, m.show_viewport) for m in o.modifiers]
+            for m, _, _ in mods:
+                m.show_render = m.show_viewport = False
+            saved.append((o, o.data, me, mods))
+            o.data = me
+    update()
+    return saved
+
+
+def untuck_hair(saved):
+    for o, data, me, mods in saved:
+        o.data = data
+        for m, r, v in mods:
+            m.show_render, m.show_viewport = r, v
+        bpy.data.meshes.remove(me)
+    update()
+
+
 def reset():
     ROOT.location = (0, 0, 0)
     ROOT.rotation_euler = (0, 0, 0)
@@ -2610,11 +2663,14 @@ if OUTFITS_MODE:
         for o in objs:
             o.hide_render = False
         all_styles = STYLE_PICK
+        tuck = name in HAIR_TUCK
         if name in BIG_HATS:
             STYLE_PICK = [x for x in all_styles if x not in BIG_STYLES]
             if STYLE_PICK:
                 CURRENT_OUTFIT = name
+                saved = tuck_hair(objs) if tuck else []
                 render_states()
+                untuck_hair(saved)
             STYLE_PICK = [x for x in all_styles if x in BIG_STYLES]
             if STYLE_PICK:
                 fr = BIG_HATS[name]
@@ -2625,7 +2681,9 @@ if OUTFITS_MODE:
                 tufts = [o for o in HAIRSTYLES["swept"] if o.name.startswith("SweptTuft")]
                 HAIRSTYLES["swept"] = [o for o in HAIRSTYLES["swept"] if o not in tufts]   # under the hat
                 CURRENT_OUTFIT = name + "-big"
+                saved = tuck_hair(objs) if tuck else []
                 render_states()
+                untuck_hair(saved)
                 HAIRSTYLES["swept"] += tufts
                 fr.location, fr.scale = loc0, sc0
             STYLE_PICK = all_styles
