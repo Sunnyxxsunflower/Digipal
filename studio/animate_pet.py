@@ -587,14 +587,14 @@ def rod(a, b, radius, mat, parent):
 
 
 # autumn beret with a little leaf pin
-beret_red = outfit_mat("of_beret", "#a23b3f", 0.8)
-leaf_orange = outfit_mat("of_leaf", "#e8833a", 0.6)
+beret_red = outfit_mat("of_beret", "#702124", 0.8)       # the studio lights lift it to about #a23b3f
+leaf_orange = outfit_mat("of_leaf", "#d39a5e", 0.6)     # renders a soft peach
 # a felt beret like Nancy's reference: a short straight headband, and a big soft pillowy top that
 # overhangs it, drooping down on one side (you can see the band under the other side),
 # with a little curved stalk on top
 BERET = empty("BeretFrame", (0.06, 0.02, 2.3), HEAD)       # the band sits low, hugging her head
 BERET.rotation_euler = (math.radians(7), math.radians(6), 0)
-BERET_R, BERET_ZC, BERET_HT, BERET_HB = 0.78, 0.25, 0.19, 0.11    # cushion: radius, center, top/bottom
+BERET_R, BERET_ZC, BERET_HT, BERET_HB = 0.78, 0.24, 0.15, 0.09    # cushion: radius, center, top/bottom
 BERET_PIVOT = 0.13                             # where the band ends and the drooping top begins
 BERET_DROOP = (math.radians(-3), math.radians(-9), 0)
 
@@ -651,7 +651,7 @@ def beret_mesh(name):
     return o
 
 
-beret_band = outfit_mat("of_beret_band", "#a23b3f", 0.8)           # same red as the top
+beret_band = outfit_mat("of_beret_band", "#6b1b1e", 0.85)          # renders about #7a2a2e, darker than the top
 o = hat_part(beret_mesh("Beret"), beret_red, BERET, (0, 0, 0))
 o.data.materials.append(beret_band)
 OUTFITS["beret"].append(o)
@@ -678,9 +678,9 @@ for k in range(len(pts) - 1):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=6, radius=rad)
     OUTFITS["beret"].append(hat_part(made(), beret_red, TOP, tuple(p1)))
 
-leaf_red = outfit_mat("of_leaf2", "#c2512b", 0.6)
+leaf_red = outfit_mat("of_leaf2", "#b8644a", 0.6)       # renders a soft salmon
 leaf_vein = outfit_mat("of_vein", "#8a3a1c", 0.6)
-gold_pin = outfit_mat("of_goldpin", "#e3b64e", 0.35)
+gold_pin = outfit_mat("of_goldpin", "#d8cc78", 0.45)    # pale butter yellow
 
 
 def leaf_mesh(name, length, width, thick):
@@ -729,7 +729,7 @@ for k, (mat, ang, ln, wd) in enumerate(((leaf_orange, -38, 0.24, 0.075), (leaf_r
     OUTFITS["beret"].append(hat_part(leaf_mesh("Leaf%d" % k, ln, wd, 0.016), mat, fr, (0, ln * 0.5, 0)))
     bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.005, depth=ln * 0.8)    # the vein
     OUTFITS["beret"].append(hat_part(made(), leaf_vein, fr, (0, ln * 0.5, 0.018), (math.radians(90), 0, 0)))
-bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.028)
+bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.036)
 o = made()
 o.scale = (1, 1, 0.6)
 OUTFITS["beret"].append(hat_part(o, gold_pin, PIN, (0, 0, 0.03)))               # the pin
