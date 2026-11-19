@@ -584,7 +584,7 @@ SUNHAT_DOME = 0.35                       # how much the flat top rounds up into 
 SUNHAT_TILT = -30                        # tipped back on her head, so the brim frames her face like a halo
 
 
-def import_strawhat(path, keys=None):
+def import_strawhat(path, keys=None, crown_r=None, frame=None):
     """keys: shape key name -> value (the model's own floppier brim poses)."""
     keys = keys or {}
     info = []
@@ -624,7 +624,7 @@ def import_strawhat(path, keys=None):
     s = SUNHAT_BRIM_R / rmax
     c = crown_r * s
     crown_top = (ztop - brim_top) * s * SUNHAT_CROWN_UP
-    f = max(1.0, SUNHAT_CROWN_R / c)            # widen just the crown if it's too small for her hair
+    f = max(1.0, (crown_r or SUNHAT_CROWN_R) / c)   # widen just the crown if it's too small for her hair
     c2 = max(c * 1.35, c * f * 1.1)
 
     def fit(p):
@@ -678,7 +678,7 @@ def import_strawhat(path, keys=None):
     parts = []
     for o in objs:
         mat = straw if o is body else ribbon_blue
-        parts.append(hat_part(o, mat, SUNHAT, (0, 0, 0)))
+        parts.append(hat_part(o, mat, frame or SUNHAT, (0, 0, 0)))
     return parts
 
 
@@ -689,6 +689,15 @@ if os.path.exists(SUNHAT_BLEND):
     SUNHAT.rotation_euler.x = math.radians(SUNHAT_TILT)   # (Nancy's drawing: worn tipped back)
     SUNHAT.location.y += 0.10                              # pulled down onto her head, a bit to the back,
     SUNHAT.location.z -= 0.16                              # so the dome rests on top of it
+    # the short hair styles (shaggy, swept) get their own fit: a snugger crown, sitting a bit
+    # higher, and no snipping (Nancy liked it this way for them)
+    SUNHAT_SHORT = empty("SunHatShortFrame", (0.0, 0, 2.28), HEAD)
+    SUNHAT_SHORT.rotation_euler = (math.radians(SUNHAT_TILT), math.radians(-5), 0)
+    SUNHAT_SHORT.location.y += 0.10
+    SUNHAT_SHORT.location.z -= 0.10
+    SUNHAT_SHORT_OBJS = import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES, crown_r=0.66, frame=SUNHAT_SHORT)
+else:
+    SUNHAT_SHORT, SUNHAT_SHORT_OBJS = SUNHAT, []
 
 def rod(a, b, radius, mat, parent):
     """A thin bar from a to b (like stick(), which is defined further down)."""
@@ -2673,7 +2682,8 @@ if OUTFITS_MODE:
     pick = [a for a in ARGS if a in OUTFITS]
     # the bigger hair styles get the Santa and witch hats a little lower and a bit bigger
     # (their own copy of those outfit frames, in outfit_santa-big / outfit_witch-big)
-    BIG_HATS = {"santa": SANTA, "witch": WITCH, "sunhat": SUNHAT, "beret": BERET}
+    BIG_HATS = {"santa": SANTA, "witch": WITCH, "sunhat": SUNHAT_SHORT, "beret": BERET}
+    BIG_SWAP = {"sunhat": SUNHAT_SHORT_OBJS} if SUNHAT_SHORT_OBJS else {}   # its own hat for short hair
     BIG_FIT = {"santa": (-0.08, 1.12), "witch": (-0.08, 1.12), "sunhat": (0.02, 1.04), "beret": (-0.03, 1.08)}
     BIG_STYLES = ("shaggy", "swept")
     for name, objs in OUTFITS.items():
@@ -2700,9 +2710,20 @@ if OUTFITS_MODE:
                 tufts = [o for o in HAIRSTYLES["swept"] if o.name.startswith("SweptTuft")]
                 HAIRSTYLES["swept"] = [o for o in HAIRSTYLES["swept"] if o not in tufts]   # under the hat
                 CURRENT_OUTFIT = name + "-big"
-                saved = tuck_hair(objs) if tuck else []
+                swap = BIG_SWAP.get(name)
+                if swap:
+                    for o in objs:
+                        o.hide_render = True
+                    for o in swap:
+                        o.hide_render = False
+                saved = tuck_hair(objs) if tuck and not swap else []
                 render_states()
                 untuck_hair(saved)
+                if swap:
+                    for o in swap:
+                        o.hide_render = True
+                    for o in objs:
+                        o.hide_render = False
                 HAIRSTYLES["swept"] += tufts
                 fr.location, fr.scale = loc0, sc0
             STYLE_PICK = all_styles
