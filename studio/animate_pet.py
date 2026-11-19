@@ -651,7 +651,7 @@ def beret_mesh(name):
     return o
 
 
-beret_band = outfit_mat("of_beret_band", "#7a2a2e", 0.85)          # two shades darker than the top
+beret_band = outfit_mat("of_beret_band", "#a23b3f", 0.8)           # same red as the top
 o = hat_part(beret_mesh("Beret"), beret_red, BERET, (0, 0, 0))
 o.data.materials.append(beret_band)
 OUTFITS["beret"].append(o)
