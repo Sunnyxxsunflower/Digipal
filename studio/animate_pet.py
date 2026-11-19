@@ -538,7 +538,7 @@ def on_head(n, dist, name):
 # summer sun hat: a wide floppy straw brim, a rounded crown, a ribbon band with a little bow
 straw = prop_mat("of_straw", "#ecd393", 0.85, stripes="#d8b86a")
 ribbon_blue = outfit_mat("of_ribbon", "#7fb6e8", 0.5)
-SUNHAT = empty("SunHatFrame", (0.0, 0, 2.47), HEAD)
+SUNHAT = empty("SunHatFrame", (0.0, 0, 2.43), HEAD)
 SUNHAT.rotation_euler = (math.radians(7), math.radians(-6), 0)
 bpy.ops.mesh.primitive_cone_add(vertices=96, radius1=1.12, radius2=0.62, depth=0.13)
 o = made()
@@ -583,34 +583,21 @@ bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.01, depth=0.08)
 OUTFITS["beret"].append(hat_part(made(), beret_red, LEAF, (0.03, -0.11, 0.04),
                                  (math.radians(90), 0, math.radians(-25))))
 
-# bunny ears: tall soft ears, one a little floppy
+# bunny ears: tall soft ears leaning out a little
 bunny_white = outfit_mat("of_bunny", "#fbf8ff", 0.8)
-for sx, lean, flop in ((-1, 12, 0), (1, 20, 28)):
+for sx, lean in ((-1, 12), (1, 18)):
     ang = math.radians(16) * sx
     r = 0.5
     root = empty("BunnyEar%d" % sx, (r * math.sin(ang), 0.02, 2.015 + r * math.cos(ang)), HEAD)
     root.rotation_euler = (0, math.radians(lean) * sx, 0)
     bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
     o = made()
-    o.scale = (0.12, 0.06, 0.34)
-    OUTFITS["bunny"].append(hat_part(o, bunny_white, root, (0, 0, 0.3)))
+    o.scale = (0.14, 0.07, 0.43)
+    OUTFITS["bunny"].append(hat_part(o, bunny_white, root, (0, 0, 0.36)))
     bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
     o = made()
-    o.scale = (0.065, 0.03, 0.24)
-    OUTFITS["bunny"].append(hat_part(o, ear_in, root, (0, -0.04, 0.32)))
-    if flop:                                   # the right ear tips over at the top
-        o.scale = (0.065, 0.03, 0.2)
-        top = OUTFITS["bunny"][-2]
-        top.scale = (0.12, 0.06, 0.28)
-        bend = empty("BunnyBend%d" % sx, (0, 0, 0), root)
-        bend.parent = root
-        bend.matrix_parent_inverse.identity()
-        bend.location = (0, 0, 0.52)
-        bend.rotation_euler = (0, math.radians(flop * sx), 0)
-        bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
-        o = made()
-        o.scale = (0.11, 0.055, 0.15)
-        OUTFITS["bunny"].append(hat_part(o, bunny_white, bend, (0, 0, 0.1)))
+    o.scale = (0.075, 0.03, 0.3)
+    OUTFITS["bunny"].append(hat_part(o, ear_in, root, (0, -0.05, 0.38)))
 
 # round glasses: two gold rims over her eyes and a little bridge
 gold = outfit_mat("of_gold", "#e3b64e", 0.35)
@@ -654,18 +641,18 @@ BOW = on_head((-0.5, -0.2, 0.84), 0.6, "BowFrame")
 for sx in (-1, 1):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
     o = made()
-    o.scale = (0.2, 0.13, 0.06)
-    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.17 * sx, 0, 0.07),
+    o.scale = (0.27, 0.17, 0.08)
+    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.23 * sx, 0, 0.09),
                                    (0, math.radians(-14 * sx), math.radians(10 * sx))))
     bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=1)
     o = made()
-    o.scale = (0.06, 0.15, 0.03)
-    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.09 * sx, -0.15, 0.04),
+    o.scale = (0.08, 0.2, 0.04)
+    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.12 * sx, -0.2, 0.05),
                                    (0, 0, math.radians(22 * sx))))
-bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=0.07)
+bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=0.09)
 o = made()
 o.scale = (1, 1, 0.75)
-OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0, 0, 0.09)))
+OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0, 0, 0.12)))
 
 
 # star clip on the right side, above her ear
@@ -695,7 +682,7 @@ def star_mesh(name, r_out, r_in, thick):
 
 
 STAR = on_head((0.62, -0.42, 0.45), 0.6, "StarClipFrame")
-OUTFITS["star"].append(hat_part(star_mesh("StarClip", 0.15, 0.065, 0.05), yolk, STAR, (0, 0, 0)))
+OUTFITS["star"].append(hat_part(star_mesh("StarClip", 0.2, 0.085, 0.06), yolk, STAR, (0, 0, 0)))
 
 
 # mittens that grip a window's edge while she peeks (not attached to her arms:
