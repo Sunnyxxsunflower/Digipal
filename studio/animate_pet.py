@@ -662,6 +662,51 @@ o.scale = (0.08, 0.06, 0.05)
 c.append(obj_part(o, white, ROOT, smooth=False))
 PROPS2["camera"] = c
 
+# zafu: a round, puffy meditation cushion with pleated sides, sitting on the floor under her
+def pleat_mat(name, hexcol, pleat_hex, rough=0.75):
+    m = prop_mat(name, hexcol, rough)
+    nt = m.node_tree
+    b = nt.nodes.get("Principled BSDF")
+    h1, h2 = hexcol.lstrip("#"), pleat_hex.lstrip("#")
+    lin = lambda h: [((c + 0.055) / 1.055) ** 2.4 if c > 0.04045 else c / 12.92
+                     for c in (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))]
+    c1, c2 = lin(h1), lin(h2)
+    wv = nt.nodes.new("ShaderNodeTexWave")          # soft vertical pleats all the way round
+    wv.wave_type = "BANDS"
+    wv.bands_direction = "X"
+    wv.wave_profile = "SIN"
+    wv.inputs["Scale"].default_value = 9.0
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].color = (c2[0], c2[1], c2[2], 1)
+    ramp.color_ramp.elements[1].color = (c1[0], c1[1], c1[2], 1)
+    ramp.color_ramp.elements[1].position = 0.6
+    nt.links.new(wv.outputs["Fac"], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], b.inputs["Base Color"])
+    bump = nt.nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.25
+    nt.links.new(wv.outputs["Fac"], bump.inputs["Height"])
+    nt.links.new(bump.outputs["Normal"], b.inputs["Normal"])
+    return m
+
+
+zafu_side = pleat_mat("zafu_side", "#6c5aa8", "#5a4a92")
+zafu_top = prop_mat("zafu_top", "#7a68b6", 0.8)
+zafu_btn = prop_mat("zafu_button", "#f2c86b", 0.5)
+z = []
+bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=0.56, depth=0.26, location=(0, 0.06, 0.13))
+o = made()
+bv = o.modifiers.new("Soft", "BEVEL")
+bv.width = 0.09
+bv.segments = 8
+z.append(obj_part(o, zafu_side, None))
+bpy.ops.mesh.primitive_uv_sphere_add(segments=64, ring_count=24, radius=1, location=(0, 0.06, 0.25))
+o = made()
+o.scale = (0.53, 0.53, 0.09)                        # the puffy top
+z.append(obj_part(o, zafu_top, None))
+bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.035, location=(0, -0.2, 0.33))
+z.append(obj_part(made(), zafu_btn, None))           # the little button peeking out in front
+PROPS2["zafu"] = z
+
 # umbrella in her right hand: a half-dome canopy with ribs and a scalloped rim,
 # held out to her right so the pole isn't hidden behind her head
 def half_dome(radius, height, center, mat):
@@ -1719,6 +1764,25 @@ def render_states():
         tilt(HEAD, 3 * w)
         tails(2 * w, 2 * w)
         shoot("sitfloor", i)
+
+    # meditate: sitting cross-legged on her zafu, hands resting on her knees, eyes softly closed,
+    # breathing slowly (a gentle rise and fall)
+    for i in range(8):
+        reset()
+        w = wave(i, 8)
+        show2("zafu")
+        set_eyes("sleepy")
+        ROOT.location = (0, 0, -0.36 + 0.012 * w)          # sitting right on top of the cushion
+        for s in (-1, 1):
+            # legs fold forward and in, crossing at the ankles in front of the cushion
+            # (one a touch higher than the other so they cross instead of melting together)
+            LEG[s].rotation_euler = (math.radians(-(62 + 5 * s)), 0, math.radians(-s * 46))
+        # hands resting together in her lap
+        aim_arm(1, (0.11, -0.34, 0.66 + 0.01 * w))
+        aim_arm(-1, (-0.11, -0.34, 0.66 + 0.01 * w))
+        tilt(HEAD, 1.5 * w)
+        tails(1.5 * w, 1.5 * w)
+        shoot("meditate", i)
 
 
     # shy: hands on her cheeks, eyes squeezed happy, blushing
