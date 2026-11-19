@@ -182,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 29                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 30                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -5664,6 +5664,9 @@ class Pet(QWidget):
         self.happy = 0
         self.say(random.choice(MED_START_LINES), 3500)
         self.preview_until = 0
+        self.med_round_start = self.med_start
+        self.med_mid_done = False
+        QTimer.singleShot(1200, lambda: self.play_chime("start") if self.med_end else None)
 
     def show_choices(self, options, on_pick):
         if self.choice_bar is not None:
@@ -5744,7 +5747,7 @@ class Pet(QWidget):
         """Time's up: chime, then ask if you'd like to keep going (same length again)."""
         self.med_awaiting_more = True
         self.med_asked_since = time.time()
-        self.play_chime()
+        self.play_chime("end")
         self.say("Time's up~ Want to keep going?", 120000)
         m = self.med_minutes_set
         self.show_choices([(f"Yes (+{m} min)", "yes"), ("No", "no")], self.answer_keep_going)
@@ -5755,6 +5758,9 @@ class Pet(QWidget):
         if key == "yes" and self.med_end:
             # keep going: another round of the same length, so your time doubles
             self.med_end = time.time() + self.med_minutes_set * 60
+            self.med_round_start = time.time()
+            self.med_mid_done = False
+            self.play_chime("start")
             self.med_phase = -1
             self.say("Okay~ let's keep breathing \U0001F33F", 3000)
         else:
@@ -5810,7 +5816,7 @@ class Pet(QWidget):
             self.say("That's okay~ Every little breath counts \u2665", 3000)
         else:
             if not chimed:
-                self.play_chime()
+                self.play_chime("end")
             n = self.med_streak()
             line = random.choice(MED_END_LINES)
             if n > 1:
@@ -5833,6 +5839,10 @@ class Pet(QWidget):
         if now >= self.med_end:
             self.ask_keep_going()
             return
+        rs = getattr(self, "med_round_start", self.med_start) or now
+        if not getattr(self, "med_mid_done", True) and now >= rs + (self.med_end - rs) / 2:
+            self.med_mid_done = True
+            self.play_chime("middle")             # halfway there
         if self.med_guide:
             # cycle: in / hold / out, shown in her bubble
             total = sum(sec for _, sec in BREATH)
@@ -5962,37 +5972,51 @@ class Pet(QWidget):
             except Exception:
                 pass
 
-    def play_chime(self):
-        """A soft two-note bell (falls back to the system sound)."""
+    CHIMES = {
+        # kind: list of (frequency, start second, loudness); soft bell tones
+        "start": [(523.25, 0.0, 1.0)],                       # one warm bell to begin
+        "middle": [(659.25, 0.0, 0.7)],                      # a lighter single tone halfway
+        "end": [(784.0, 0.0, 1.0), (1046.5, 0.35, 1.0)],     # two rising notes to finish
+    }
+
+    def play_chime(self, kind="end"):
+        """A soft bell (falls back to the system sound)."""
         try:
             from PySide6.QtMultimedia import QSoundEffect
             import tempfile
             import wave
             import struct
-            path = os.path.join(tempfile.gettempdir(), "digi_chime.wav")
+            path = os.path.join(tempfile.gettempdir(), f"digi_chime_{kind}_v2.wav")
             if not os.path.exists(path):
                 rate = 44100
+                notes = self.CHIMES.get(kind, self.CHIMES["end"])
+                length = max(st for _, st, _ in notes) + 2.6
                 frames = []
-                for i in range(int(rate * 2.2)):
+                for i in range(int(rate * length)):
                     t = i / rate
                     v = 0.0
-                    for f0, start in ((784.0, 0.0), (1046.5, 0.35)):
+                    for f0, start, loud in notes:
                         if t >= start:
                             tt = t - start
-                            env = math.exp(-tt * 2.6)
-                            v += env * (math.sin(2 * math.pi * f0 * tt)
-                                        + 0.3 * math.sin(2 * math.pi * f0 * 2.01 * tt))
-                    frames.append(struct.pack("<h", int(max(-1, min(1, v * 0.22)) * 32767)))
+                            env = math.exp(-tt * 2.4) * min(1.0, tt / 0.005)
+                            v += loud * env * (math.sin(2 * math.pi * f0 * tt)
+                                               + 0.35 * math.sin(2 * math.pi * f0 * 2.76 * tt) * math.exp(-tt * 3)
+                                               + 0.15 * math.sin(2 * math.pi * f0 * 5.4 * tt) * math.exp(-tt * 6))
+                    frames.append(struct.pack("<h", int(max(-1, min(1, v * 0.2)) * 32767)))
                 with wave.open(path, "wb") as w:
                     w.setnchannels(1)
                     w.setsampwidth(2)
                     w.setframerate(rate)
                     w.writeframes(b"".join(frames))
-            if getattr(self, "chime", None) is None:
-                self.chime = QSoundEffect(self)
-                self.chime.setSource(QUrl.fromLocalFile(path))
-                self.chime.setVolume(0.6)
-            self.chime.play()
+            if not hasattr(self, "chimes"):
+                self.chimes = {}
+            ch = self.chimes.get(kind)
+            if ch is None:
+                ch = QSoundEffect(self)
+                ch.setSource(QUrl.fromLocalFile(path))
+                ch.setVolume(0.6)
+                self.chimes[kind] = ch
+            ch.play()
         except Exception as ex:
             print("chime:", ex, file=sys.stderr, flush=True)
             QApplication.beep()
