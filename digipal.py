@@ -161,15 +161,19 @@ SLEEPY_POKE_LINES = ["Mmm... five more minutes~", "Zzz... huh?", "Mm? Oh, hi~"]
 IDLE_LINES = ["...", "Keep going!", "I'm here!", "Snack time?", "Stretch your shoulders!"]
 SING_LINES = ["la la la~", "lalala~", "la la~ la la~", "~la la la~", "lala~"]
 
-ACC_MODES = ["auto", "santa", "witch", "party", "heart", "ears", "flower", "scarf", "none"]
+ACC_MODES = ["auto", "santa", "witch", "party", "heart", "ears", "flower", "scarf",
+             "sunhat", "beret", "bunny", "glasses", "bow", "star", "none"]
 ACC_NAMES = {"auto": "Outfit: seasonal", "santa": "Santa hat!", "witch": "Witch hat! \U0001F383",
              "party": "Party hat! \U0001F389", "heart": "Heart clip! \u2665",
              "ears": "Cat ears! Nya~", "flower": "A little flower!", "scarf": "Cozy scarf!",
+             "sunhat": "Sun hat! \u2600", "beret": "A cozy beret~ \U0001F342", "bunny": "Bunny ears! Hop hop~",
+             "glasses": "Ooh, smart glasses!", "bow": "A big bow! \U0001F380", "star": "A little star! \u2B50",
              "none": "No outfit"}
 ACC_MENU = [("auto", "Seasonal (changes by month)"), ("santa", "Santa hat"),
             ("witch", "Witch hat"), ("party", "Party hat"), ("heart", "Heart clip"),
             ("ears", "Cat ears"), ("flower", "Flower"),
-            ("scarf", "Scarf"), ("none", "Nothing")]
+            ("scarf", "Scarf"), ("sunhat", "Sun hat"), ("beret", "Beret"), ("bunny", "Bunny ears"),
+            ("glasses", "Glasses"), ("bow", "Big bow"), ("star", "Star clip"), ("none", "Nothing")]
 
 SPEED = 2.0
 PAUSE_CHANCE = 0.004
@@ -182,7 +186,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 32                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 33                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -222,6 +226,21 @@ DIGI_BIRTHDAY = (11, 14)        # the day Digi was made (2026)
 DIGI_BORN_YEAR = 2026
 BDAY_HEADS_UP = (7, 1)          # she mentions a birthday this many days ahead (plus on the day)
 BDAY_TIME = 9                   # birthday reminders come after this hour
+
+
+def easter(year):
+    """Easter Sunday (Gregorian calendar)."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month, day = divmod(h + l - 7 * m + 114, 31)
+    return date(year, month, day + 1)
 
 
 def next_birthday(month, day, today):
@@ -5646,6 +5665,8 @@ class Pet(QWidget):
             return "party"
         if d.month == 2 and 7 <= d.day <= 14:
             return "heart"
+        if -6 <= (d - easter(d.year)).days <= 1:
+            return "bunny"                      # the week before Easter through Easter Monday
         if d.month == 10:
             return "witch"
         if d.month == 12 or (d.month == 1 and d.day <= 5):
@@ -5654,6 +5675,10 @@ class Pet(QWidget):
             return "flower"
         if d.month in (11, 1, 2):
             return "scarf"
+        if d.month in (6, 7, 8):
+            return "sunhat"
+        if d.month == 9:
+            return "beret"
         return None
 
     # ----- focus timer + pomodoro -----
@@ -7033,6 +7058,61 @@ class Pet(QWidget):
                 p.drawEllipse(QPointF(cx + 7 * math.cos(ang), cy + 7 * math.sin(ang)), 6, 6)
             p.setBrush(QBrush(QColor("#ffd54f")))
             p.drawEllipse(QPointF(cx, cy), 4.5, 4.5)
+        elif acc == "sunhat":
+            p.setPen(QPen(dark, 2))
+            p.setBrush(QBrush(QColor("#ecd393")))
+            p.drawEllipse(QPointF(110, 52 + b), 78, 13)
+            p.drawChord(QRectF(80, 20 + b, 60, 50), 0, 180 * 16)
+            p.setBrush(QBrush(QColor("#7fb6e8")))
+            p.drawRect(QRectF(81, 38 + b, 58, 8))
+        elif acc == "beret":
+            p.save()
+            p.translate(118, 46 + b)
+            p.rotate(10)
+            p.setPen(QPen(dark, 2))
+            p.setBrush(QBrush(QColor("#a23b3f")))
+            p.drawEllipse(QPointF(0, 0), 52, 15)
+            p.drawLine(QPointF(0, -15), QPointF(1, -21))
+            p.restore()
+            p.setPen(QPen(dark, 1.5))
+            p.setBrush(QBrush(QColor("#e8833a")))
+            p.drawEllipse(QPointF(83, 70 + b), 6, 9)
+        elif acc == "bunny":
+            p.setPen(QPen(dark, 2))
+            for cx, tilt in ((92, -10), (128, 14)):
+                p.save()
+                p.translate(cx, 34 + b)
+                p.rotate(tilt)
+                p.setBrush(QBrush(QColor("#fbf8ff")))
+                p.drawEllipse(QPointF(0, -10), 10, 26)
+                p.setBrush(QBrush(QColor("#f27fa8")))
+                p.setPen(Qt.NoPen)
+                p.drawEllipse(QPointF(0, -8), 5, 18)
+                p.setPen(QPen(dark, 2))
+                p.restore()
+        elif acc == "glasses":
+            p.setPen(QPen(QColor("#e3b64e"), 2.4))
+            p.setBrush(Qt.NoBrush)
+            p.drawEllipse(QPointF(91, 104 + b), 10, 10)
+            p.drawEllipse(QPointF(129, 104 + b), 10, 10)
+            p.drawLine(QPointF(101, 103 + b), QPointF(119, 103 + b))
+        elif acc == "bow":
+            p.setPen(QPen(dark, 1.8))
+            p.setBrush(QBrush(QColor("#f27fa8")))
+            cx, cy = 80, 52 + b
+            p.drawPolygon(QPolygonF([QPointF(cx, cy), QPointF(cx - 18, cy - 10), QPointF(cx - 18, cy + 9)]))
+            p.drawPolygon(QPolygonF([QPointF(cx, cy), QPointF(cx + 18, cy - 10), QPointF(cx + 18, cy + 9)]))
+            p.drawEllipse(QPointF(cx, cy), 5, 5)
+        elif acc == "star":
+            p.setPen(QPen(dark, 1.6))
+            p.setBrush(QBrush(QColor("#ffd54f")))
+            cx, cy = 147, 78 + b
+            pts = []
+            for k in range(10):
+                a = -math.pi / 2 + k * math.pi / 5
+                r = 9 if k % 2 == 0 else 4
+                pts.append(QPointF(cx + r * math.cos(a), cy + r * math.sin(a)))
+            p.drawPolygon(QPolygonF(pts))
         elif acc == "party":
             # little striped cone tilted on the right side of her head, pom-pom on top
             p.save()
