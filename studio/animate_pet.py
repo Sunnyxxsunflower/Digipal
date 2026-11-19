@@ -579,8 +579,9 @@ SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.8
 SUNHAT_SHAPES = {}                       # the model's own droopy pose squashes the crown, so:
 SUNHAT_CROWN_UP = 1.08                   # its plain shape (crown a touch taller), and
-SUNHAT_DROOP = (0.24, 0.10)              # our own big floppy droop: all around, plus extra at her sides
-SUNHAT_DOME = 0.2                        # how much the flat top rounds up into a dome
+SUNHAT_DROOP = (0.05, 0.6)               # brim droop at the edge: a little all around, a lot at her sides
+SUNHAT_DOME = 0.35                       # how much the flat top rounds up into a big dome
+SUNHAT_TILT = -30                        # tipped back on her head, so the brim frames her face like a halo
 
 
 def import_strawhat(path, keys=None):
@@ -685,6 +686,8 @@ if os.path.exists(SUNHAT_BLEND):
     for o in OUTFITS["sunhat"]:
         bpy.data.objects.remove(o, do_unlink=True)
     OUTFITS["sunhat"] = import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES)
+    SUNHAT.rotation_euler.x = math.radians(SUNHAT_TILT)   # (Nancy's drawing: worn tipped back)
+    SUNHAT.location.y += 0.08                              # a bit toward the back of her head
 
 def rod(a, b, radius, mat, parent):
     """A thin bar from a to b (like stick(), which is defined further down)."""
