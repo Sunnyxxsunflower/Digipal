@@ -182,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 21                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 22                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1127,7 +1127,8 @@ ROOM_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "digi_room.
 ROOM_SIZE = (2000, 1500)                 # the drawing's size; spots below are in its pixels
 ROOM_SCREEN = (1292, 196, 532, 1150)     # the phone's white screen: x, y, w, h
 ROOM_DIGI = (700, 1400, 940) 
-ROOM_TILT = 1.5                          # degrees: the phone in the drawing leans a little to the right            # where Digi stands on the rug: center x, feet y, height
+ROOM_TILT = 0                            # degrees to tilt the phone's settings (1.5 matches the drawing's lean;
+                                         # Nancy liked them straight better)            # where Digi stands on the rug: center x, feet y, height
 
 
 class FlowLayout(QLayout):
@@ -1252,10 +1253,11 @@ class CustomizeDialog(QDialog):
             for sc in (look_scroll, personal_scroll):
                 sc.setStyleSheet("QScrollArea { background: white; border: none; } "
                                  "QScrollArea > QWidget > QWidget { background: white; }")
-            self.phone = QWidget()
+            self.phone = QWidget(None if ROOM_TILT else self)
             self.phone.setObjectName("phone")
-            # the phone screen is tilted like the drawn phone: its real buttons live in a tiny
-            # graphics scene that's turned by ROOM_TILT degrees (clicks and scrolling still work)
+        if self.in_room and ROOM_TILT:
+            # tilted: the phone's real buttons live in a tiny graphics scene that's turned by
+            # ROOM_TILT degrees (clicks and scrolling still work)
             self.phone_scene = QGraphicsScene(self)
             self.phone_proxy = self.phone_scene.addWidget(self.phone)
             self.phone_view = QGraphicsView(self.phone_scene, self)
@@ -1267,6 +1269,7 @@ class CustomizeDialog(QDialog):
             self.phone_view.setAlignment(Qt.AlignLeft | Qt.AlignTop)
             self.phone_view.setRenderHints(QPainter.Antialiasing | QPainter.TextAntialiasing
                                            | QPainter.SmoothPixmapTransform)
+        if self.in_room:
             self.phone.setStyleSheet("QWidget#phone { background: white; }")
             pl = QVBoxLayout(self.phone)
             pl.setContentsMargins(4, 0, 4, 6)
@@ -1514,6 +1517,13 @@ class CustomizeDialog(QDialog):
         k = self.room_k()
         x, y, w, h = ROOM_SCREEN
         pw_, ph_ = int(w * k), int(h * k)
+        if not ROOM_TILT:
+            self.phone.setGeometry(int(x * k), int(y * k), pw_, ph_)
+        else:
+            self.place_tilted_phone(x, y, k, pw_, ph_)
+        self.place_digi(k)
+
+    def place_tilted_phone(self, x, y, k, pw_, ph_):
         pad = int(ph_ * math.sin(math.radians(abs(ROOM_TILT)))) + 4    # room for the turned corners
         self.phone.resize(pw_, ph_)
         self.phone_proxy.setTransformOriginPoint(pw_ / 2, ph_ / 2)
@@ -1522,6 +1532,8 @@ class CustomizeDialog(QDialog):
         self.phone_scene.setSceneRect(0, 0, pw_ + 2 * pad, ph_ + 2 * pad)
         self.phone_view.setSceneRect(0, 0, pw_ + 2 * pad, ph_ + 2 * pad)
         self.phone_view.setGeometry(int(x * k) - pad, int(y * k) - pad, pw_ + 2 * pad, ph_ + 2 * pad)
+
+    def place_digi(self, k):
         cx, feet, tall = ROOM_DIGI
         ph = int(tall * k)
         pw = int(ph * 220 / 260)
