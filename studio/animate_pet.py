@@ -579,8 +579,8 @@ SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.8
 SUNHAT_SHAPES = {}                       # the model's own droopy pose squashes the crown, so:
 SUNHAT_CROWN_UP = 1.08                   # its plain shape (crown a touch taller), and
-SUNHAT_DROOP = (0.24, 0.10)              # our own big floppy droop: all around, plus extra at her sides
-SUNHAT_DOME = 0.2                        # how much the flat top rounds up into a dome
+SUNHAT_DROOP = (0.08, 0.22)              # our own floppy droop: a little in front (her eyes show), more at her sides
+SUNHAT_DOME = 0.12                       # how much the flat top rounds up into a dome
 
 
 def import_strawhat(path, keys=None):
@@ -1952,7 +1952,9 @@ def tuck_hair(hat_objs, depth=0.6):
             for v in bm.verts:
                 p = mw @ v.co
                 for tree, hw, hwi in hats:
-                    hit = tree.ray_cast(hwi @ p, Vector((0, 0, -1)), depth)
+                    # (starting a little above, so hair just under the hat goes too: the cut
+                    # edges stay well hidden and their outlines can't peek out at the brim)
+                    hit = tree.ray_cast(hwi @ p + Vector((0, 0, 0.05)), Vector((0, 0, -1)), depth + 0.05)
                     if hit[0] is not None:          # the hat is right below: this bit pokes out
                         cut.append(v)
                         break
