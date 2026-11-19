@@ -579,8 +579,8 @@ SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.8
 SUNHAT_SHAPES = {}                       # the model's own droopy pose squashes the crown, so:
 SUNHAT_CROWN_UP = 1.08                   # its plain shape (crown a touch taller), and
-SUNHAT_DROOP = (0.08, 0.22)              # our own floppy droop: a little in front (her eyes show), more at her sides
-SUNHAT_DOME = 0.12                       # how much the flat top rounds up into a dome
+SUNHAT_DROOP = (0.24, 0.10)              # our own big floppy droop: all around, plus extra at her sides
+SUNHAT_DOME = 0.2                        # how much the flat top rounds up into a dome
 
 
 def import_strawhat(path, keys=None):
