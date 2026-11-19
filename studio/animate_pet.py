@@ -741,8 +741,7 @@ def _below_mask(nt, ramp, below):
     return mul.outputs["Value"]
 
 
-# the whole band can have it: the fold under the cushion is red top material, so it never gets a line
-contact_line(beret_band)                 # black line where the band rests on her head or her hair
+# (the line where the beret rests on her HAIR is inked in by cutout_layer, from a mask of the hat)
 update()
 o, _line = beret_mesh("Beret", BERET.matrix_world.inverted() @ HEAD_C)
 o = hat_part(o, beret_red, BERET, (0, 0, 0))
@@ -1927,6 +1926,36 @@ def cutout_layer(shown, out_path, gray_path=None):
         sl.material = m
     for o in held:
         o.is_holdout = False
+    # one more quick mask, of the hat/accessory she's wearing: where it sits IN FRONT of her hair
+    # (like a beret's band resting on it) there's no outline in the render, so we ink one in
+    worn = [o for lst in OUTFITS.values() for o in lst
+            if not o.hide_render and o.type in ("MESH", "CURVE") and o not in shown
+            and not any(sl.material is not None and sl.material.name.startswith("hair")
+                        for sl in o.material_slots)]          # cat ears ARE hair: leave them be
+    worn_path = None
+    if gray_path and worn:
+        swapped2, held2 = [], []
+        for o in scene.objects:
+            if o.type not in ("MESH", "CURVE") or o.hide_render:
+                continue
+            if o in worn:
+                for sl in o.material_slots:
+                    if sl.material is not None:
+                        swapped2.append((sl, sl.material))
+                        sl.material = HAIR_MASK_MAT
+            else:
+                o.is_holdout = True
+                held2.append(o)
+        scene.render.use_freestyle = False
+        scene.cycles.samples = 6
+        worn_path = os.path.join(bpy.app.tempdir or "/tmp", "digi_layer_worn.png")
+        scene.render.filepath = worn_path
+        bpy.ops.render.render(write_still=True)
+        scene.render.use_freestyle, scene.cycles.samples, scene.render.filepath = fs, samples, path0
+        for sl, m in swapped2:
+            sl.material = m
+        for o in held2:
+            o.is_holdout = False
     for o in shown:
         o.hide_render = True
     # cut it out: inside the mask, plus the dark outline pixels hugging its edge
@@ -1935,6 +1964,22 @@ def cutout_layer(shown, out_path, gray_path=None):
     w, h = full.size
     fp = np.array(full.pixels[:], dtype=np.float32).reshape(h, w, 4)
     m = np.array(mask.pixels[:], dtype=np.float32).reshape(h, w, 4)[..., 3]
+    extra = []
+    if worn_path:
+        wimg = bpy.data.images.load(worn_path, check_existing=False)
+        extra.append(wimg)
+        wm = np.array(wimg.pixels[:], dtype=np.float32).reshape(h, w, 4)[..., 3] > 0.5
+        near = wm.copy()                       # the accessory, grown by one pixel (8 neighbors)
+        near[1:, :] |= wm[:-1, :]
+        near[:-1, :] |= wm[1:, :]
+        near[:, 1:] |= wm[:, :-1]
+        near[:, :-1] |= wm[:, 1:]
+        near[1:, 1:] |= wm[:-1, :-1]
+        near[:-1, :-1] |= wm[1:, 1:]
+        near[1:, :-1] |= wm[:-1, 1:]
+        near[:-1, 1:] |= wm[1:, :-1]
+        seam = (m > 0.5) & ~wm & near          # hair pixels right against it: ink them
+        fp[seam, 0:3] = (0.015, 0.012, 0.015)
     grow = m > 0.05
     for _ in range(3):
         g2 = grow.copy()
@@ -1953,7 +1998,7 @@ def cutout_layer(shown, out_path, gray_path=None):
         ref = float(np.median(inside)) if inside.size else 1.0
         g = np.clip(lum / max(ref, 1e-3) * 0.85, 0.0, 1.0) * keep
         outs.append((gray_path, np.dstack([g, g, g, a])))
-    imgs = [full, mask]
+    imgs = [full, mask] + extra
     for path, arr in outs:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         img = bpy.data.images.new("layer", w, h, alpha=True)
