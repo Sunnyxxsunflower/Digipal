@@ -593,29 +593,52 @@ SUNHAT_DOME = 0.35                       # how much the flat top rounds up into 
 SUNHAT_TILT = -30                        # tipped back on her head, so the brim frames her face like a halo
 
 
+_STRAWHAT = []
+
+
+def strawhat_templates(path):
+    """The model's pieces, loaded once and kept out of the scene, untouched: (object, placement)."""
+    if not _STRAWHAT:
+        with bpy.data.libraries.load(path, link=False) as (src, dst):
+            dst.objects = [n for n in src.objects if n.startswith("Strawhat") or n == "Band"]
+        objs = [o for o in dst.objects if o is not None and o.type == "MESH"]
+        for o in objs:
+            bpy.context.collection.objects.link(o)
+        update()
+        for o in objs:
+            _STRAWHAT.append((o, o.matrix_world.copy()))
+        for o in objs:
+            bpy.context.collection.objects.unlink(o)
+    return _STRAWHAT
+
+
 def import_strawhat(path, keys=None, crown_r=None, frame=None):
     """keys: shape key name -> value (the model's own floppier brim poses)."""
     keys = keys or {}
     info = []
-    with bpy.data.libraries.load(path, link=False) as (src, dst):
-        dst.objects = [n for n in src.objects if n.startswith("Strawhat") or n == "Band"]
-    objs = [o for o in dst.objects if o is not None and o.type == "MESH"]
-    for o in objs:
-        bpy.context.collection.objects.link(o)
-    update()
-    # bake each piece's placement into its mesh (and its shape keys), then forget parents
-    for o in objs:
-        mw = o.matrix_world.copy()
+    # every sun hat (one per hair style) is a fresh copy of the untouched model, so fitting one
+    # never changes another (appending the file again can hand back the same, already fitted mesh)
+    objs = []
+    for t, mw in strawhat_templates(path):
+        o = t.copy()
+        o.data = t.data.copy()
         o.parent = None
+        bpy.context.collection.objects.link(o)
+        objs.append((o, mw))
+    update()
+    # bake each piece's placement into its mesh (and its shape keys)
+    for o, mw in objs:
         o.data.transform(mw)
         if o.data.shape_keys:
             for kb in o.data.shape_keys.key_blocks:
                 for d in kb.data:
                     d.co = mw @ d.co
+        o.matrix_parent_inverse = Matrix()
         o.matrix_world = Matrix()
         info.append("%s: verts %d, modifiers %s, shape keys %s" % (
             o.name, len(o.data.vertices), [(m.type, m.name) for m in o.modifiers],
             [kb.name for kb in o.data.shape_keys.key_blocks] if o.data.shape_keys else None))
+    objs = [o for o, _ in objs]
     body = next(o for o in objs if o.name.startswith("Strawhat") and "Ribbon" not in o.name)
     vs = [v.co.copy() for v in body.data.vertices]
     cx = (min(v.x for v in vs) + max(v.x for v in vs)) / 2
