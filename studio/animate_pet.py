@@ -576,7 +576,7 @@ for sx in (-1, 1):
 # studio/models, it replaces the simple one above: fitted so the crown hugs her hair and the
 # brim is as wide as ours, in our own straw and ribbon colors.
 SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
-SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.66        # crown just a bit wider than her head, so it sits ON it
+SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.84        # a roomy inside, so her hair fits under the hat
 SUNHAT_SHAPES = {}                       # the model's own droopy pose squashes the crown, so:
 SUNHAT_CROWN_UP = 1.08                   # its plain shape (crown a touch taller), and
 SUNHAT_DROOP = (0.05, 0.6)               # brim droop at the edge: a little all around, a lot at her sides
@@ -688,7 +688,7 @@ if os.path.exists(SUNHAT_BLEND):
     OUTFITS["sunhat"] = import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES)
     SUNHAT.rotation_euler.x = math.radians(SUNHAT_TILT)   # (Nancy's drawing: worn tipped back)
     SUNHAT.location.y += 0.10                              # pulled down onto her head, a bit to the back,
-    SUNHAT.location.z -= 0.10                              # so the dome rests on top of it
+    SUNHAT.location.z -= 0.16                              # so the dome rests on top of it
 
 def rod(a, b, radius, mat, parent):
     """A thin bar from a to b (like stick(), which is defined further down)."""
