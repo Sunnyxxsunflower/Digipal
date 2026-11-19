@@ -615,6 +615,7 @@ def strawhat_templates(path):
 def import_strawhat(path, keys=None, crown_r=None, frame=None):
     """keys: shape key name -> value (the model's own floppier brim poses)."""
     keys = keys or {}
+    want_r = crown_r or SUNHAT_CROWN_R          # (crown_r gets reused below for the measured one)
     info = []
     # every sun hat (one per hair style) is a fresh copy of the untouched model, so fitting one
     # never changes another (appending the file again can hand back the same, already fitted mesh)
@@ -656,7 +657,7 @@ def import_strawhat(path, keys=None, crown_r=None, frame=None):
     s = SUNHAT_BRIM_R / rmax
     c = crown_r * s
     crown_top = (ztop - brim_top) * s * SUNHAT_CROWN_UP
-    f = max(1.0, (crown_r or SUNHAT_CROWN_R) / c)   # widen just the crown if it's too small for her hair
+    f = max(1.0, want_r / c)                    # widen just the crown if it's too small for her hair
     c2 = max(c * 1.35, c * f * 1.1)
 
     def fit(p):
