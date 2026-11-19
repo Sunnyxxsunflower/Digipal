@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QTimeEdit, QCheckBox, QMessageBox, QGridLayout,
                                QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
                                QScrollArea, QComboBox, QSpinBox, QLayout, QStackedWidget,
-                               QGraphicsView, QGraphicsScene)
+                               QGraphicsView, QGraphicsScene, QSlider)
 from PySide6.QtCore import QTime, QRect, QSize, QPoint, QUrl
 
 IS_WIN = sys.platform == "win32"
@@ -182,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 24                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 25                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -200,6 +200,8 @@ DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 # ---- MEDITATION ----
 MED_CHOICES = (5, 10, 15, 20, 30)        # minutes
+MED_SOUNDS = [("none", "None"), ("white", "White noise"), ("pink", "Pink noise"),
+              ("forest", "Forest"), ("river", "River"), ("waves", "Waves")]
 MED_LATER = 30                           # "Later": she asks again in this many minutes
 MED_ANSWER_WAIT = 180                    # no answer this long: she quietly treats it as "Later"
 BREATH = (("Breathe in...", 4), ("Hold...", 4), ("Breathe out...", 6))   # seconds per step
@@ -1254,6 +1256,11 @@ class CustomizeDialog(QDialog):
         personal_scroll.setFrameShape(QFrame.NoFrame)
         personal_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         personal_scroll.setWidget(self.build_personal())
+        med_scroll = QScrollArea()               # the Meditation tab
+        med_scroll.setWidgetResizable(True)
+        med_scroll.setFrameShape(QFrame.NoFrame)
+        med_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        med_scroll.setWidget(self.build_meditation())
         # live preview of her
         self.preview = QLabel()
         self.preview.setAlignment(Qt.AlignCenter)
@@ -1262,7 +1269,7 @@ class CustomizeDialog(QDialog):
             self.preview.setParent(self)
             self.preview.setStyleSheet("background: transparent;")
             self.preview.setAttribute(Qt.WA_TransparentForMouseEvents)
-            for sc in (look_scroll, personal_scroll):
+            for sc in (look_scroll, personal_scroll, med_scroll):
                 sc.setStyleSheet("QScrollArea { background: white; border: none; } "
                                  "QScrollArea > QWidget > QWidget { background: white; }")
             self.phone = QWidget(None if ROOM_TILT else self)
@@ -1292,11 +1299,12 @@ class CustomizeDialog(QDialog):
             self.pages = QStackedWidget()
             self.pages.addWidget(look_scroll)
             self.pages.addWidget(personal_scroll)
+            self.pages.addWidget(med_scroll)
             pl.addWidget(self.pages, 1)
             dock = QHBoxLayout()
             dock.setSpacing(6)
             self.dock_buttons = []
-            for i, label in enumerate(("Look", "Me")):
+            for i, label in enumerate(("Look", "Me", "Calm")):
                 b = QPushButton(label)
                 b.setCheckable(True)
                 b.setProperty("class", "dock")
@@ -1314,7 +1322,7 @@ class CustomizeDialog(QDialog):
             col = QVBoxLayout(look)
             col.setContentsMargins(2, 2, 6, 2)
         else:
-            for sc in (look_scroll, personal_scroll):
+            for sc in (look_scroll, personal_scroll, med_scroll):
                 sc.setStyleSheet("QScrollArea { background: transparent; } "
                                  "QScrollArea > QWidget > QWidget { background: #f6f3fb; }")
             main = QVBoxLayout(self)
@@ -1326,6 +1334,7 @@ class CustomizeDialog(QDialog):
             main.addWidget(tabs)
             tabs.addTab(look_scroll, "Look")
             tabs.addTab(personal_scroll, "Personal settings")
+            tabs.addTab(med_scroll, "Meditation")
             outer = QHBoxLayout(look)
             self.preview.setFixedSize(220, 260)
             self.preview.setStyleSheet("background: #ece8f5; border-radius: 12px;")
@@ -1509,7 +1518,7 @@ class CustomizeDialog(QDialog):
     # ---------- the room ----------
     def show_page(self, i):
         self.pages.setCurrentIndex(i)
-        self.phone_title.setText(("Customize Digi", "About you")[i])
+        self.phone_title.setText(("Customize Digi", "About you", "Meditation")[i])
         for j, b in enumerate(self.dock_buttons):
             b.setChecked(i == j)
 
@@ -1598,6 +1607,92 @@ class CustomizeDialog(QDialog):
             p.end()
         else:
             super().paintEvent(e)
+
+    # ---------- the Meditation tab ----------
+    def build_meditation(self):
+        pet = self.pet
+        w = QWidget()
+        col = QVBoxLayout(w)
+        col.setContentsMargins(2, 2, 6, 2)
+        col.addWidget(self.heading("Daily meditation \U0001F9D8"))
+        row = self.hrow()
+        self.med_on = QCheckBox("Invite me every day at")
+        row.addWidget(self.med_on)
+        self.med_at = QTimeEdit(QTime.fromString(pet.med_time or "12:00", "HH:mm"))
+        self.med_at.setDisplayFormat("h:mm AP")
+        self.med_at.setStyleSheet(self.BOX_STYLE)
+        row.addWidget(self.med_at)
+        row.addStretch(1)
+        col.addLayout(row)
+        self.med_on.setChecked(bool(pet.med_time))
+        self.med_at.setEnabled(bool(pet.med_time))
+        self.med_on.toggled.connect(lambda *a: self.pick_med_time())
+        self.med_at.timeChanged.connect(lambda *a: self.pick_med_time())
+
+        col.addWidget(self.heading("Background sound"))
+        lab = QLabel("Plays softly while you meditate. Tap one to listen.")
+        lab.setWordWrap(True)
+        col.addWidget(lab)
+        row = self.hrow()
+        self.sound_buttons = {}
+        for key, label in MED_SOUNDS:
+            b = self.option(label)
+            b.clicked.connect(lambda *a, k=key: self.pick_med_sound(k))
+            self.sound_buttons[key] = b
+            row.addWidget(b)
+        col.addLayout(row)
+        row = self.hrow()
+        row.addWidget(QLabel("Volume"))
+        self.med_vol = QSlider(Qt.Horizontal)
+        self.med_vol.setRange(0, 100)
+        self.med_vol.setValue(int(pet.med_volume * 100))
+        self.med_vol.setMinimumWidth(120)
+        self.med_vol.valueChanged.connect(lambda v: self.pick_med_volume(v))
+        row.addWidget(self.med_vol)
+        col.addLayout(row)
+
+        col.addWidget(self.heading("Breathing guide"))
+        row = self.hrow()
+        self.guide_buttons = {}
+        for key, label in ((True, "Words + glow"), (False, "Just the glow")):
+            b = self.option(label)
+            b.clicked.connect(lambda *a, k=key: self.pick_med_guide(k))
+            self.guide_buttons[key] = b
+            row.addWidget(b)
+        col.addLayout(row)
+
+        col.addWidget(self.heading("Meditate now"))
+        row = self.hrow()
+        for m in MED_CHOICES:
+            b = self.option(f"{m} min")
+            b.setCheckable(False)
+            b.clicked.connect(lambda *a, m=m: self.start_med_now(m))
+            row.addWidget(b)
+        col.addLayout(row)
+        self.med_stats = QLabel("")
+        self.med_stats.setWordWrap(True)
+        col.addWidget(self.med_stats)
+        col.addStretch(1)
+        return w
+
+    def pick_med_sound(self, key):
+        self.pet.med_sound = key
+        self.pet.save_custom()
+        self.pet.preview_med_sound(key)
+        self.refresh()
+
+    def pick_med_volume(self, v):
+        self.pet.med_volume = v / 100
+        self.pet.set_med_volume()
+        self.pet.save_custom()
+
+    def pick_med_guide(self, k):
+        self.pet.set_med_guide(k)
+        self.refresh()
+
+    def start_med_now(self, m):
+        self.accept()
+        self.pet.start_meditation(m)
 
     # ---------- the Personal settings tab ----------
     BOX_STYLE = ("QLineEdit, QTimeEdit { padding: 5px 8px; border-radius: 8px; border: 1px solid #c9bfe3; "
@@ -1703,21 +1798,6 @@ class CustomizeDialog(QDialog):
         self.sleep_on.toggled.connect(lambda *a: self.pick_sleep())
         self.sleep_from.timeChanged.connect(lambda *a: self.pick_sleep())
         self.sleep_to.timeChanged.connect(lambda *a: self.pick_sleep())
-
-        col.addWidget(self.heading("Daily meditation \U0001F9D8"))
-        row = self.hrow()
-        self.med_on = QCheckBox("Invite me every day at")
-        row.addWidget(self.med_on)
-        self.med_at = QTimeEdit(QTime.fromString(pet.med_time or "12:00", "HH:mm"))
-        self.med_at.setDisplayFormat("h:mm AP")
-        self.med_at.setStyleSheet(self.BOX_STYLE)
-        row.addWidget(self.med_at)
-        row.addStretch(1)
-        col.addLayout(row)
-        self.med_on.setChecked(bool(pet.med_time))
-        self.med_at.setEnabled(bool(pet.med_time))
-        self.med_on.toggled.connect(lambda *a: self.pick_med_time())
-        self.med_at.timeChanged.connect(lambda *a: self.pick_med_time())
 
         col.addWidget(self.heading("Game nights (D&D)"))
         lab = QLabel("From 7pm on these days she plays D&D with you, and counts down to the next one.")
@@ -1831,6 +1911,18 @@ class CustomizeDialog(QDialog):
             b.setChecked(k == pet.hairstyle)
         for k, b in self.bubble_buttons.items():
             b.setChecked(k == pet.bubble_mode)
+        for k, b in getattr(self, "sound_buttons", {}).items():
+            b.setChecked(k == pet.med_sound)
+        for k, b in getattr(self, "guide_buttons", {}).items():
+            b.setChecked(k == pet.med_guide)
+        if hasattr(self, "med_stats"):
+            if pet.med_days:
+                n = pet.med_streak()
+                days = len(set(pet.med_days))
+                self.med_stats.setText(("\U0001F33F %d days in a row \u2022 " % n if n > 1 else "\U0001F33F ")
+                                       + f"{days} day{'s' if days != 1 else ''}, {pet.med_total} minutes in all")
+            else:
+                self.med_stats.setText("\U0001F33F No meditations yet. Try 5 minutes!")
         for k, b in self.shape_buttons.items():
             b.setChecked(k == pet.bubble_shape)
         for k, b in self.spot_buttons.items():
@@ -2690,6 +2782,10 @@ class Pet(QWidget):
         self.med_total = 0                # minutes, all time
         self.med_pending = []             # reminders that waited until she was done
         self.med_phase = -1
+        self.med_sound = "none"           # background sound while meditating
+        self.med_volume = 0.5
+        self.sound_player = None
+        self.sound_fade = None
         self.med_time = None              # "HH:MM": she invites you to meditate every day at this time
         self.med_asked_day = None         # the day she already asked (and you said no / did it)
         self.med_ask_at = None            # "Later": ask again at this time
@@ -5355,7 +5451,8 @@ class Pet(QWidget):
                            "birthdays": self.birthdays, "my_birthday": self.my_birthday,
                            "med_days": self.med_days[-400:], "med_total": self.med_total,
                            "med_guide": self.med_guide, "med_time": self.med_time,
-                           "med_asked_day": self.med_asked_day}, f)
+                           "med_asked_day": self.med_asked_day, "med_sound": self.med_sound,
+                           "med_volume": self.med_volume}, f)
         except Exception:
             pass
 
@@ -5384,6 +5481,10 @@ class Pet(QWidget):
             self.med_guide = bool(d["med_guide"])
         if d.get("med_time") is None or re.fullmatch(r"\d\d:\d\d", str(d.get("med_time"))):
             self.med_time = d.get("med_time")
+        if d.get("med_sound") in [k for k, _ in MED_SOUNDS]:
+            self.med_sound = d["med_sound"]
+        if isinstance(d.get("med_volume"), (int, float)):
+            self.med_volume = max(0.0, min(1.0, float(d["med_volume"])))
         if isinstance(d.get("med_asked_day"), str):
             self.med_asked_day = d["med_asked_day"]
         if "my_birthday" in d:
@@ -5527,6 +5628,7 @@ class Pet(QWidget):
         self.med_phase = -1
         self.happy = 0
         self.say(random.choice(MED_START_LINES), 3500)
+        self.play_med_sound(self.med_sound)
 
     def show_choices(self, options, on_pick):
         if self.choice_bar is not None:
@@ -5660,6 +5762,7 @@ class Pet(QWidget):
             return
         self.close_choices()
         self.med_awaiting_more = False
+        self.stop_med_sound()
         done = (min(time.time(), self.med_end) - (self.med_start or time.time())) / 60
         self.med_end = None
         self.med_phase = -1
@@ -5753,6 +5856,89 @@ class Pet(QWidget):
         for x in range(64, 160, 12):
             p.drawLine(QPointF(x, 222), QPointF(x + 2, 236))
         p.restore()
+
+    # ----- calm background sounds -----
+    def sound_file(self, key):
+        path = os.path.join(self.code_dir(), "sounds", key + ".wav")
+        return path if os.path.exists(path) else None
+
+    def play_med_sound(self, key, fade_in=3.0, stop_after=None):
+        """Loop one of the calm sounds, fading in. stop_after: seconds (a short listen)."""
+        self.stop_med_sound(fade=0)
+        path = self.sound_file(key) if key and key != "none" else None
+        if not path:
+            return
+        try:
+            from PySide6.QtMultimedia import QSoundEffect
+            sp = QSoundEffect(self)
+            sp.setSource(QUrl.fromLocalFile(path))
+            try:
+                sp.setLoopCount(QSoundEffect.Loop.Infinite.value)
+            except Exception:
+                sp.setLoopCount(-2)
+            sp.setVolume(0.0)
+            sp.play()
+            self.sound_player = sp
+            self.fade_sound_to(self.med_volume, fade_in)
+            if stop_after:
+                QTimer.singleShot(int(stop_after * 1000),
+                                  lambda s=sp: self.stop_med_sound(fade=1.5) if self.sound_player is s
+                                  and not self.med_end else None)
+        except Exception as ex:
+            print("sound:", ex, file=sys.stderr, flush=True)
+
+    def fade_sound_to(self, target, secs, then_stop=False, sp=None):
+        sp = sp or self.sound_player
+        if sp is None:
+            return
+        if not then_stop and self.sound_fade is not None:
+            self.sound_fade.stop()
+        steps = max(1, int(secs * 20))
+        start = sp.volume()
+        state = {"i": 0}
+        tm = QTimer(self)
+
+        def step():
+            state["i"] += 1
+            try:
+                sp.setVolume(start + (target - start) * min(1.0, state["i"] / steps))
+            except Exception:
+                tm.stop()
+                return
+            if state["i"] >= steps:
+                tm.stop()
+                tm.deleteLater()
+                if then_stop:
+                    sp.stop()
+                    sp.deleteLater()
+        tm.timeout.connect(step)
+        tm.start(50)
+        if not then_stop:
+            self.sound_fade = tm
+
+    def stop_med_sound(self, fade=2.5):
+        sp = self.sound_player
+        if sp is None:
+            return
+        self.sound_player = None
+        if self.sound_fade is not None:
+            self.sound_fade.stop()
+            self.sound_fade = None
+        if fade:
+            self.fade_sound_to(0.0, fade, then_stop=True, sp=sp)     # fades out on its own
+        else:
+            sp.stop()
+            sp.deleteLater()
+
+    def set_med_volume(self):
+        if self.sound_player is not None:
+            self.sound_player.setVolume(self.med_volume)
+
+    def preview_med_sound(self, key):
+        if self.med_end:                    # meditating: switch the sound for real
+            self.play_med_sound(key, fade_in=1.5)
+        else:
+            self.play_med_sound(key, fade_in=0.8, stop_after=6)
 
     def play_chime(self):
         """A soft two-note bell (falls back to the system sound)."""

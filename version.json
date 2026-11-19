@@ -1,5 +1,5 @@
 {
-  "version": 24,
+  "version": 25,
   "frames_version": 1,
   "frames_mb": 800,
   "frames_url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-1/pet_frames.zip",
@@ -15,6 +15,11 @@
     "digiears_linux.py",
     "install_linux.sh",
     "digi_room.png",
+    "sounds/white.wav",
+    "sounds/pink.wav",
+    "sounds/forest.wav",
+    "sounds/river.wav",
+    "sounds/waves.wav",
     "version.json"
   ],
   "frames_patches": [
