@@ -592,9 +592,9 @@ leaf_orange = outfit_mat("of_leaf", "#e8833a", 0.6)
 # a felt beret like Nancy's reference: a short straight headband, and a big soft pillowy top that
 # overhangs it, drooping down on one side (you can see the band under the other side),
 # with a little curved stalk on top
-BERET = empty("BeretFrame", (0.08, 0.02, 2.42), HEAD)
-BERET.rotation_euler = (math.radians(7), math.radians(8), 0)
-BERET_TOP = (0.24, 0.74, 0.21)                 # puff: center height, width, half-height
+BERET = empty("BeretFrame", (0.06, 0.02, 2.3), HEAD)       # the band sits low, hugging her head
+BERET.rotation_euler = (math.radians(7), math.radians(6), 0)
+BERET_TOP = (0.21, 0.76, 0.21)                 # puff: center height, width, half-height
 
 
 def pillow(name):
@@ -617,26 +617,36 @@ def pillow(name):
 
 
 band = local_empty("BeretBand", BERET)
-bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=0.53, depth=0.13)
+bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=0.54, depth=0.16)
 o = made()
 bv = o.modifiers.new("Soft", "BEVEL")
 bv.width = 0.03
 bv.segments = 4
-OUTFITS["beret"].append(hat_part(o, beret_red, band, (0, 0, 0.03)))             # the headband
-TOP = local_empty("BeretTop", BERET, (0.02, 0, BERET_TOP[0]), (math.radians(-4), math.radians(-11), 0))
+OUTFITS["beret"].append(hat_part(o, beret_red, band, (0, 0, 0.05)))             # the headband
+TOP = local_empty("BeretTop", BERET, (0.02, 0, BERET_TOP[0]), (math.radians(-3), math.radians(-9), 0))
 o = pillow("BeretPuff")
 o.scale = (BERET_TOP[1], BERET_TOP[1] * 0.96, BERET_TOP[2])
 OUTFITS["beret"].append(hat_part(o, beret_red, TOP, (0, 0, 0)))                  # droops to her right
-# curved stalk: three little pieces bending over
-prev = Vector((0.04, 0.02, BERET_TOP[2] * 0.95))
-update()
-_tw = TOP.matrix_world.copy()                   # rod() works in world space
-for k, (dx, dz) in enumerate(((0.0, 0.07), (0.02, 0.05), (0.045, 0.025))):
-    nxt = prev + Vector((dx, 0, dz))
-    OUTFITS["beret"].append(rod(tuple(_tw @ prev), tuple(_tw @ nxt), 0.022 - 0.004 * k, beret_red, TOP))
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=6, radius=0.022 - 0.004 * k)
-    OUTFITS["beret"].append(hat_part(made(), beret_red, TOP, tuple(nxt)))
-    prev = nxt
+# curved stalk: little pieces bending over, rooted inside the top of the puff
+def puff_z(x, y):
+    """Height of the beret's top surface at (x, y), in the puff's own space."""
+    r = min(0.999, math.hypot(x, y) / BERET_TOP[1])
+    return BERET_TOP[2] * (1 - r * r) ** 0.31
+
+
+pts = [Vector((0.03, 0.02, puff_z(0.03, 0.02) - 0.03))]
+for dx, dz in ((0.0, 0.08), (0.015, 0.05), (0.04, 0.03), (0.045, 0.0)):
+    pts.append(pts[-1] + Vector((dx, 0, dz)))
+for k in range(len(pts) - 1):
+    p0, p1 = pts[k], pts[k + 1]
+    d = p1 - p0
+    rad = 0.022 - 0.003 * k
+    bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=rad, depth=d.length)
+    OUTFITS["beret"].append(hat_part(made(), beret_red, TOP, tuple((p0 + p1) / 2),
+                                     tuple(d.to_track_quat("Z", "Y").to_euler())))
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=6, radius=rad)
+    OUTFITS["beret"].append(hat_part(made(), beret_red, TOP, tuple(p1)))
+
 leaf_red = outfit_mat("of_leaf2", "#c2512b", 0.6)
 leaf_vein = outfit_mat("of_vein", "#8a3a1c", 0.6)
 gold_pin = outfit_mat("of_goldpin", "#e3b64e", 0.35)
@@ -673,14 +683,15 @@ def leaf_mesh(name, length, width, thick):
     return o
 
 
-# pinned on the front-right of the beret's puff, sitting ON the surface (lifted a little so
-# nothing pokes through): two clean leaves fanned apart with a little gold pin where they meet
-_a, _c = BERET_TOP[1], BERET_TOP[2]
-_x, _y = 0.36, -0.52
-_r = min(0.99, math.hypot(_x, _y) / _a)
-_z = _c * (1 - _r ** 2) ** 0.31
-_nrm = Vector((_x / _a ** 2, _y / _a ** 2, 0.6 * _z / _c ** 2)).normalized()
-PIN = local_empty("LeafPinFrame", TOP, tuple(Vector((_x, _y, _z)) + _nrm * 0.05))
+# pinned on the front-right of the beret's rounded edge, facing you, sitting ON the surface
+# (lifted a little so nothing pokes through): two clean leaves fanned apart with a gold pin
+_x, _y = 0.28, -0.68
+_e = 0.01
+_z = puff_z(_x, _y)
+_dzdx = (puff_z(_x + _e, _y) - puff_z(_x - _e, _y)) / (2 * _e)
+_dzdy = (puff_z(_x, _y + _e) - puff_z(_x, _y - _e)) / (2 * _e)
+_nrm = Vector((-_dzdx, -_dzdy, 1.0)).normalized()
+PIN = local_empty("LeafPinFrame", TOP, tuple(Vector((_x, _y, _z)) + _nrm * 0.035))
 PIN.rotation_euler = _nrm.to_track_quat("Z", "Y").to_euler()
 for k, (mat, ang, ln, wd) in enumerate(((leaf_orange, -38, 0.24, 0.075), (leaf_red, 36, 0.2, 0.065))):
     fr = local_empty("Leaf%d" % k, PIN, (0, 0, 0.012 * k), (0, 0, math.radians(ang)))
