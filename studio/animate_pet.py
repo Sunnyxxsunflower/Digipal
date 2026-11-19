@@ -574,16 +574,28 @@ for sx in (-1, 1):
 # autumn beret with a little leaf pin
 beret_red = outfit_mat("of_beret", "#a23b3f", 0.8)
 leaf_orange = outfit_mat("of_leaf", "#e8833a", 0.6)
-BERET = empty("BeretFrame", (0.08, 0.02, 2.5), HEAD)
-BERET.rotation_euler = (math.radians(8), math.radians(14), 0)
+# a soft, puffy felt beret (like a real one): a full pillowy top that overhangs a narrower band,
+# gently lumpy, slouching to one side, with the little stalk on top
+BERET = empty("BeretFrame", (0.1, 0.02, 2.46), HEAD)
+BERET.rotation_euler = (math.radians(9), math.radians(17), 0)
+BERET_TOP = (0.12, 0.72, 0.25)                 # puff: center height, width, half-height
+bpy.ops.mesh.primitive_uv_sphere_add(segments=96, ring_count=48, radius=1)
+o = made()
+o.scale = (BERET_TOP[1], BERET_TOP[1] * 0.97, BERET_TOP[2])
+lumps = bpy.data.textures.new("BeretLumps", "CLOUDS")
+lumps.noise_scale = 0.9
+dsp = o.modifiers.new("Lumps", "DISPLACE")      # soft felt lumps, not a perfect shape
+dsp.texture = lumps
+dsp.strength = 0.035
+dsp.mid_level = 0.5
+OUTFITS["beret"].append(hat_part(o, beret_red, BERET, (0.03, 0, BERET_TOP[0])))
 bpy.ops.mesh.primitive_uv_sphere_add(segments=64, ring_count=24, radius=1)
 o = made()
-o.scale = (0.66, 0.66, 0.16)
-OUTFITS["beret"].append(hat_part(o, beret_red, BERET, (0, 0, 0.06)))
-bpy.ops.mesh.primitive_torus_add(major_radius=0.5, minor_radius=0.05, major_segments=64, minor_segments=12)
-OUTFITS["beret"].append(hat_part(made(), beret_red, BERET, (0, 0, -0.02)))       # the band
-bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.025, depth=0.08)
-OUTFITS["beret"].append(hat_part(made(), beret_red, BERET, (0, 0, 0.24)))        # the little stalk
+o.scale = (0.56, 0.56, 0.12)
+OUTFITS["beret"].append(hat_part(o, beret_red, BERET, (0, 0, 0.0)))             # band, tucked under
+bpy.ops.mesh.primitive_cone_add(vertices=16, radius1=0.03, radius2=0.012, depth=0.13)
+OUTFITS["beret"].append(hat_part(made(), beret_red, BERET, (0.03, 0.02, BERET_TOP[0] + BERET_TOP[2] + 0.05),
+                                 (math.radians(-10), math.radians(12), 0)))      # the little stalk
 leaf_red = outfit_mat("of_leaf2", "#c2512b", 0.6)
 leaf_vein = outfit_mat("of_vein", "#8a3a1c", 0.6)
 
@@ -619,16 +631,23 @@ def leaf_mesh(name, length, width, thick):
     return o
 
 
-# pinned on the front-right of the beret, facing out
-PIN = local_empty("LeafPinFrame", BERET, (0.36, -0.46, 0.13))
-PIN.rotation_euler = Vector((0.45, -0.75, 0.5)).normalized().to_track_quat("Z", "Y").to_euler()
+# pinned on the front-right of the beret's puff, sitting ON the surface (lifted a little so
+# nothing pokes through)
+_a, _c = BERET_TOP[1], BERET_TOP[2]
+_x, _y = 0.40, -0.50
+_r = min(0.99, math.hypot(_x, _y) / _a)
+_z = _c * math.sqrt(1 - _r ** 2)
+_nrm = Vector((_x / _a ** 2, _y / _a ** 2, _z / _c ** 2)).normalized()
+_pos = Vector((_x + 0.03, _y, BERET_TOP[0] + _z)) + _nrm * 0.045
+PIN = local_empty("LeafPinFrame", BERET, tuple(_pos))
+PIN.rotation_euler = _nrm.to_track_quat("Z", "Y").to_euler()
 for k, (mat, ang, ln, wd) in enumerate(((leaf_orange, -30, 0.24, 0.075), (leaf_red, 25, 0.2, 0.065))):
     fr = local_empty("Leaf%d" % k, PIN, (0, 0, 0.004 * k), (0, 0, math.radians(ang)))
     OUTFITS["beret"].append(hat_part(leaf_mesh("Leaf%d" % k, ln, wd, 0.018), mat, fr, (0, 0.05, 0)))
     bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.006, depth=ln * 0.85)   # the vein
     OUTFITS["beret"].append(hat_part(made(), leaf_vein, fr, (0, 0.06, 0.02), (math.radians(90), 0, 0)))
-    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.009, depth=0.07)        # the stem
-    OUTFITS["beret"].append(hat_part(made(), leaf_vein, fr, (0, -0.09, 0.01), (math.radians(90), 0, 0)))
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.009, depth=0.045)       # a short stem
+    OUTFITS["beret"].append(hat_part(made(), leaf_vein, fr, (0, -0.075, 0.012), (math.radians(90), 0, 0)))
 
 # bunny ears: the left one stands up, the right one folds over to the side near the top
 bunny_white = outfit_mat("of_bunny", "#fbf8ff", 0.8)
