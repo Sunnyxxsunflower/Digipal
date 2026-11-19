@@ -577,10 +577,15 @@ for sx in (-1, 1):
 # brim is as wide as ours, in our own straw and ribbon colors.
 SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.8
-SUNHAT_SHAPES = {}                       # shape key name -> value, once we know what they do
+# the model's two floppy-brim poses (hat: Cloth / Cloth.001, band + ribbons: HatPos1 / HatPos2)
+SUNHAT_POSES = {"sunhat_floppy1": {"Cloth": 1.0, "HatPos1": 1.0},
+                "sunhat_floppy2": {"Cloth.001": 1.0, "HatPos2": 1.0}}
+SUNHAT_SHAPES = {}                       # the pose the real sun hat uses (empty: the plain one)
 
 
-def import_strawhat(path):
+def import_strawhat(path, keys=None):
+    """keys: shape key name -> value (the model's own floppier brim poses)."""
+    keys = keys or {}
     info = []
     with bpy.data.libraries.load(path, link=False) as (src, dst):
         dst.objects = [n for n in src.objects if n.startswith("Strawhat") or n == "Band"]
@@ -647,7 +652,7 @@ def import_strawhat(path):
                     setattr(m, attr, getattr(m, attr) * s)
         if o.data.shape_keys:
             for kb in o.data.shape_keys.key_blocks[1:]:
-                kb.value = SUNHAT_SHAPES.get(kb.name, 0.0)
+                kb.value = keys.get(kb.name, 0.0)
         o.data.materials.clear()
         for poly in o.data.polygons:
             poly.material_index = 0
@@ -667,7 +672,11 @@ def import_strawhat(path):
 if os.path.exists(SUNHAT_BLEND):
     for o in OUTFITS["sunhat"]:
         bpy.data.objects.remove(o, do_unlink=True)
-    OUTFITS["sunhat"] = import_strawhat(SUNHAT_BLEND)
+    OUTFITS["sunhat"] = import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES)
+    _args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    for _pose, _keys in SUNHAT_POSES.items():      # preview-only: try the floppy poses
+        if _pose in _args:
+            OUTFITS[_pose] = import_strawhat(SUNHAT_BLEND, _keys)
 
 def rod(a, b, radius, mat, parent):
     """A thin bar from a to b (like stick(), which is defined further down)."""
