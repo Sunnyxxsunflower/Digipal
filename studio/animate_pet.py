@@ -1928,9 +1928,10 @@ scene.cycles.samples = 24
 
 
 # ------------------------------------------------------------- posing helpers
-# hats that tuck her hair under them: any hair poking up through the hat is snipped off (only
-# while that hat's frames render), so it looks like the hair is hiding under the hat
-HAIR_TUCK = set()                        # (the sun hat is worn tipped back now: her hair sits in front of it)
+# hats that tuck her hair under them: any hair poking out through the hat (the hat is between it
+# and the middle of her head) is snipped off, only while that hat's frames render, so it looks
+# like the hair goes in under the hat
+HAIR_TUCK = {"sunhat"}
 
 
 def tuck_hair(hat_objs, depth=0.6):
@@ -1956,10 +1957,11 @@ def tuck_hair(hat_objs, depth=0.6):
             for v in bm.verts:
                 p = mw @ v.co
                 for tree, hw, hwi in hats:
-                    # (starting a little above, so hair just under the hat goes too: the cut
-                    # edges stay well hidden and their outlines can't peek out at the brim)
-                    hit = tree.ray_cast(hwi @ p + Vector((0, 0, 0.05)), Vector((0, 0, -1)), depth + 0.05)
-                    if hit[0] is not None:          # the hat is right below: this bit pokes out
+                    # outside the hat = the hat is between the middle of her head and this bit
+                    a0, a1 = hwi @ HEAD_C, hwi @ p
+                    d = a1 - a0
+                    hit = tree.ray_cast(a0, d.normalized(), d.length) if d.length > 1e-6 else (None,)
+                    if hit[0] is not None:          # it pokes out through the hat: snip
                         cut.append(v)
                         break
             if not cut:
