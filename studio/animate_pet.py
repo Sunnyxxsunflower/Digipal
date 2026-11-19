@@ -355,7 +355,8 @@ def made():
     return bpy.context.active_object
 
 
-OUTFITS = {k: [] for k in ("santa", "witch", "ears", "flower", "scarf", "party", "heart")}
+OUTFITS = {k: [] for k in ("santa", "witch", "ears", "flower", "scarf", "party", "heart",
+                            "sunhat", "beret", "bunny", "glasses", "bow", "star")}
 
 # witch hat: built as ONE hat (brim, crown, band share one frame), then set on her head
 def hat_part(o, mat, frame, loc, rot=(0, 0, 0)):
@@ -524,6 +525,178 @@ n = Vector((-0.4, -0.5, 0.77)).normalized()
 HEART = empty("HeartClipFrame", tuple(HEAD_C + n * 0.6), HEAD)
 HEART.rotation_euler = n.to_track_quat("Z", "Y").to_euler()
 OUTFITS["heart"].append(hat_part(heart_mesh("HeartClip", 0.0085, 0.06), heart_pink, HEART, (0, 0, 0)))
+
+# ---- round 3 accessories -------------------------------------------------------------------
+def on_head(n, dist, name):
+    """A frame sitting on her head surface at direction n, facing out."""
+    n = Vector(n).normalized()
+    fr = empty(name, tuple(HEAD_C + n * dist), HEAD)
+    fr.rotation_euler = n.to_track_quat("Z", "Y").to_euler()
+    return fr
+
+
+# summer sun hat: a wide floppy straw brim, a rounded crown, a ribbon band with a little bow
+straw = prop_mat("of_straw", "#ecd393", 0.85, stripes="#d8b86a")
+ribbon_blue = outfit_mat("of_ribbon", "#7fb6e8", 0.5)
+SUNHAT = empty("SunHatFrame", (0.0, 0, 2.47), HEAD)
+SUNHAT.rotation_euler = (math.radians(7), math.radians(-6), 0)
+bpy.ops.mesh.primitive_cone_add(vertices=96, radius1=1.12, radius2=0.62, depth=0.13)
+o = made()
+bv = o.modifiers.new("Soft", "BEVEL")
+bv.width = 0.03
+bv.segments = 3
+OUTFITS["sunhat"].append(hat_part(o, straw, SUNHAT, (0, 0, 0.0)))               # brim, sloping down
+bpy.ops.mesh.primitive_cylinder_add(vertices=72, radius=0.6, depth=0.3)
+o = made()
+bv = o.modifiers.new("Soft", "BEVEL")
+bv.width = 0.12
+bv.segments = 6
+OUTFITS["sunhat"].append(hat_part(o, straw, SUNHAT, (0, 0, 0.2)))                # rounded crown
+bpy.ops.mesh.primitive_cylinder_add(vertices=72, radius=0.615, depth=0.09)
+OUTFITS["sunhat"].append(hat_part(made(), ribbon_blue, SUNHAT, (0, 0, 0.1)))     # ribbon band
+for sx in (-1, 1):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=0.09)
+    o = made()
+    o.scale = (1.3, 0.5, 0.75)
+    OUTFITS["sunhat"].append(hat_part(o, ribbon_blue, SUNHAT, (0.42 + 0.09 * sx, -0.43, 0.11),
+                                      (0, math.radians(20 * sx), math.radians(-45))))
+
+# autumn beret with a little leaf pin
+beret_red = outfit_mat("of_beret", "#a23b3f", 0.8)
+leaf_orange = outfit_mat("of_leaf", "#e8833a", 0.6)
+BERET = empty("BeretFrame", (0.08, 0.02, 2.5), HEAD)
+BERET.rotation_euler = (math.radians(8), math.radians(14), 0)
+bpy.ops.mesh.primitive_uv_sphere_add(segments=64, ring_count=24, radius=1)
+o = made()
+o.scale = (0.66, 0.66, 0.16)
+OUTFITS["beret"].append(hat_part(o, beret_red, BERET, (0, 0, 0.06)))
+bpy.ops.mesh.primitive_torus_add(major_radius=0.5, minor_radius=0.05, major_segments=64, minor_segments=12)
+OUTFITS["beret"].append(hat_part(made(), beret_red, BERET, (0, 0, -0.02)))       # the band
+bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.025, depth=0.08)
+OUTFITS["beret"].append(hat_part(made(), beret_red, BERET, (0, 0, 0.24)))        # the little stalk
+LEAF = on_head((-0.42, -0.62, 0.5), 0.63, "LeafPinFrame")
+bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
+o = made()
+o.scale = (0.08, 0.13, 0.025)
+OUTFITS["beret"].append(hat_part(o, leaf_orange, LEAF, (0, 0.02, 0.04), (0, 0, math.radians(-25))))
+bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.01, depth=0.08)
+OUTFITS["beret"].append(hat_part(made(), beret_red, LEAF, (0.03, -0.11, 0.04),
+                                 (math.radians(90), 0, math.radians(-25))))
+
+# bunny ears: tall soft ears, one a little floppy
+bunny_white = outfit_mat("of_bunny", "#fbf8ff", 0.8)
+for sx, lean, flop in ((-1, 12, 0), (1, 20, 28)):
+    ang = math.radians(16) * sx
+    r = 0.5
+    root = empty("BunnyEar%d" % sx, (r * math.sin(ang), 0.02, 2.015 + r * math.cos(ang)), HEAD)
+    root.rotation_euler = (0, math.radians(lean) * sx, 0)
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
+    o = made()
+    o.scale = (0.12, 0.06, 0.34)
+    OUTFITS["bunny"].append(hat_part(o, bunny_white, root, (0, 0, 0.3)))
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
+    o = made()
+    o.scale = (0.065, 0.03, 0.24)
+    OUTFITS["bunny"].append(hat_part(o, ear_in, root, (0, -0.04, 0.32)))
+    if flop:                                   # the right ear tips over at the top
+        o.scale = (0.065, 0.03, 0.2)
+        top = OUTFITS["bunny"][-2]
+        top.scale = (0.12, 0.06, 0.28)
+        bend = empty("BunnyBend%d" % sx, (0, 0, 0), root)
+        bend.parent = root
+        bend.matrix_parent_inverse.identity()
+        bend.location = (0, 0, 0.52)
+        bend.rotation_euler = (0, math.radians(flop * sx), 0)
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
+        o = made()
+        o.scale = (0.11, 0.055, 0.15)
+        OUTFITS["bunny"].append(hat_part(o, bunny_white, bend, (0, 0, 0.1)))
+
+# round glasses: two gold rims over her eyes and a little bridge
+gold = outfit_mat("of_gold", "#e3b64e", 0.35)
+
+
+def rod(a, b, radius, mat, parent):
+    """A thin bar from a to b (like stick(), which is defined further down)."""
+    a, b = Vector(a), Vector(b)
+    d = b - a
+    bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=radius, depth=d.length, location=(a + b) / 2)
+    o = made()
+    o.rotation_euler = d.to_track_quat("Z", "Y").to_euler()
+    o.data.materials.append(mat)
+    for poly in o.data.polygons:
+        poly.use_smooth = True
+    o.hide_render = True
+    set_parent(o, parent)
+    return o
+
+
+for sx in (-1, 1):
+    x, z = 0.26 * sx, EYE_Z
+    y = -math.sqrt(max(0.0001, HEAD_R ** 2 - x ** 2 - z ** 2))
+    pos = Vector((x, y - 0.075, HEAD_C.z + z + 0.005))
+    nrm = (pos - HEAD_C).normalized()
+    fr = empty("GlassRim%d" % sx, tuple(pos), HEAD)
+    fr.rotation_euler = nrm.to_track_quat("Z", "Y").to_euler()
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.135, minor_radius=0.017, major_segments=64,
+                                     minor_segments=12)
+    OUTFITS["glasses"].append(hat_part(made(), gold, fr, (0, 0, 0)))
+    # the arm going back toward her ear (mostly hidden by her hair)
+    a = Vector((0.4 * sx, -0.43, HEAD_C.z + z + 0.02))
+    b = Vector((0.56 * sx, -0.05, HEAD_C.z + z + 0.06))
+    OUTFITS["glasses"].append(rod(tuple(a), tuple(b), 0.014, gold, HEAD))
+OUTFITS["glasses"].append(rod((-0.13, -0.58, HEAD_C.z + EYE_Z + 0.03),
+                                (0.13, -0.58, HEAD_C.z + EYE_Z + 0.03), 0.014, gold, HEAD))
+
+# big hair bow on the top-left of her head
+bow_pink = outfit_mat("of_bow", "#f27fa8", 0.55)
+BOW = on_head((-0.5, -0.2, 0.84), 0.6, "BowFrame")
+for sx in (-1, 1):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
+    o = made()
+    o.scale = (0.2, 0.13, 0.06)
+    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.17 * sx, 0, 0.07),
+                                   (0, math.radians(-14 * sx), math.radians(10 * sx))))
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=1)
+    o = made()
+    o.scale = (0.06, 0.15, 0.03)
+    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.09 * sx, -0.15, 0.04),
+                                   (0, 0, math.radians(22 * sx))))
+bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=0.07)
+o = made()
+o.scale = (1, 1, 0.75)
+OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0, 0, 0.09)))
+
+
+# star clip on the right side, above her ear
+def star_mesh(name, r_out, r_in, thick):
+    import bmesh
+    bm = bmesh.new()
+    vs = []
+    for k in range(10):
+        a = math.pi / 2 + k * math.pi / 5
+        r = r_out if k % 2 == 0 else r_in
+        vs.append(bm.verts.new((r * math.cos(a), r * math.sin(a), 0)))
+    f = bm.faces.new(vs)
+    ext = bmesh.ops.extrude_face_region(bm, geom=[f])
+    moved = [e for e in ext["geom"] if isinstance(e, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=(0, 0, thick), verts=moved)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    bv = o.modifiers.new("Puffy", "BEVEL")
+    bv.width = thick * 0.4
+    bv.segments = 4
+    bv.limit_method = "NONE"
+    return o
+
+
+STAR = on_head((0.62, -0.42, 0.45), 0.6, "StarClipFrame")
+OUTFITS["star"].append(hat_part(star_mesh("StarClip", 0.15, 0.065, 0.05), yolk, STAR, (0, 0, 0)))
+
 
 # mittens that grip a window's edge while she peeks (not attached to her arms:
 # the window hides her arms)
@@ -1398,7 +1571,8 @@ HAIR = "hair" in ARGS                  # also make a recolorable hair layer for 
 # on top (so you can swap them). Add "baked" to get the old all-in-one frames instead.
 SPLIT_BOTTOMS = "baked" not in ARGS
 ONLY = [a for a in ARGS if a not in ("outfits", "preview", "all", "hair", "bottoms", "baked",
-                                     "santa", "witch", "ears", "flower", "scarf", "party", "heart")
+                                     "santa", "witch", "ears", "flower", "scarf", "party", "heart",
+                                     "sunhat", "beret", "bunny", "glasses", "bow", "star")
         and a not in HAIRSTYLES]
 # hair styles are rendered as separate layers too (pick some by name, otherwise all of them)
 LAYERED_HAIR = "baked" not in ARGS
@@ -1701,7 +1875,8 @@ def render_states():
         reset()
         set_blush(True)
         for o in HEADPHONES:
-            o.hide_render = (CURRENT_OUTFIT or "").split("-")[0] in ("santa", "witch", "ears", "party")
+            o.hide_render = (CURRENT_OUTFIT or "").split("-")[0] in ("santa", "witch", "ears", "party",
+                                                                           "sunhat", "beret", "bunny")
         w = wave(i, F)
         ROOT.rotation_euler = (0, math.radians(5 * w), 0)
         tilt(HEAD, 8 * w)
@@ -1964,7 +2139,7 @@ if OUTFITS_MODE:
     pick = [a for a in ARGS if a in OUTFITS]
     # the bigger hair styles get the Santa and witch hats a little lower and a bit bigger
     # (their own copy of those outfit frames, in outfit_santa-big / outfit_witch-big)
-    BIG_HATS = {"santa": SANTA, "witch": WITCH}
+    BIG_HATS = {"santa": SANTA, "witch": WITCH, "sunhat": SUNHAT, "beret": BERET}
     BIG_STYLES = ("shaggy", "swept")
     for name, objs in OUTFITS.items():
         if pick and name not in pick:
