@@ -693,6 +693,48 @@ def ring_tube(name, pts, rad, sides=6):
 
 
 beret_band = outfit_mat("of_beret_band", "#6b1b1e", 0.85)          # renders about #7a2a2e, darker than the top
+
+
+def contact_line(m, dist=0.02, below=0.08):
+    """Draw a black outline on this material wherever it touches something (her head or her hair),
+    like an inked line. Only on the lower part (object z under `below`) so the fold under the
+    cushion doesn't get one."""
+    nt = m.node_tree
+    bsdf = nt.nodes.get("Principled BSDF")
+    out = next(n for n in nt.nodes if n.type == "OUTPUT_MATERIAL")
+    ao = nt.nodes.new("ShaderNodeAmbientOcclusion")
+    ao.samples = 16
+    ao.only_local = False
+    ao.inputs["Distance"].default_value = dist
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].position = 0.55
+    ramp.color_ramp.elements[0].color = (1, 1, 1, 1)
+    ramp.color_ramp.elements[1].position = 0.72
+    ramp.color_ramp.elements[1].color = (0, 0, 0, 1)
+    nt.links.new(ao.outputs["AO"], ramp.inputs["Fac"])
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(tc.outputs["Object"], sep.inputs[0])
+    low = nt.nodes.new("ShaderNodeMapRange")
+    low.inputs["From Min"].default_value = below + 0.03
+    low.inputs["From Max"].default_value = below
+    low.clamp = True
+    nt.links.new(sep.outputs["Z"], low.inputs["Value"])
+    mul = nt.nodes.new("ShaderNodeMath")
+    mul.operation = "MULTIPLY"
+    mul.use_clamp = True
+    nt.links.new(ramp.outputs["Color"], mul.inputs[0])
+    nt.links.new(low.outputs["Result"], mul.inputs[1])
+    ink = nt.nodes.new("ShaderNodeEmission")
+    ink.inputs["Color"].default_value = (0.006, 0.005, 0.006, 1)
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    nt.links.new(mul.outputs["Value"], mix.inputs["Fac"])
+    nt.links.new(bsdf.outputs["BSDF"], mix.inputs[1])
+    nt.links.new(ink.outputs["Emission"], mix.inputs[2])
+    nt.links.new(mix.outputs["Shader"], out.inputs["Surface"])
+
+
+contact_line(beret_band, below=0.12)     # black line where the band rests on her head or her hair
 update()
 o, _line = beret_mesh("Beret", BERET.matrix_world.inverted() @ HEAD_C)
 o = hat_part(o, beret_red, BERET, (0, 0, 0))
