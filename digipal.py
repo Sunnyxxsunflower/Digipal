@@ -169,12 +169,10 @@ ACC_NAMES = {"auto": "Outfit: seasonal", "santa": "Santa hat!", "witch": "Witch 
              "sunhat": "Sun hat! \u2600", "beret": "A cozy beret~ \U0001F342", "bunny": "Bunny ears! Hop hop~",
              "glasses": "Ooh, smart glasses!", "bow": "A big bow! \U0001F380", "star": "A little star! \u2B50",
              "none": "No outfit"}
-# drawn stand-in outfits (used only while a 3D picture is missing): how far down her head is in
-# each pose, and the poses where a flat drawing can sit right at all
-ACC_DROP = {"sitfloor": 33, "typing": 33, "cuddle_teddy": 33, "cuddle_ball": 33, "meditate": 26,
-            "sit": 2, "held": 3}
+# drawn outfits are pinned to her head in every picture; these are the poses where a flat
+# drawing can sit right at all (not lying down asleep, not peeking around a window)
 ACC_DROP_OK = {"idle", "blink", "happy", "walk", "sing", "surprised", "sitfloor", "typing", "cuddle_teddy",
-               "cuddle_ball", "meditate", "sit", "shy", "scared", "shiver", "camera", "umbrella", "stretch"}
+               "cuddle_ball", "meditate", "sit", "shy", "scared", "shiver", "camera"}
 ACC_MENU = [("auto", "Seasonal (changes by month)"), ("santa", "Santa hat"),
             ("witch", "Witch hat"), ("party", "Party hat"), ("heart", "Heart clip"),
             ("ears", "Cat ears"), ("flower", "Flower"),
@@ -192,7 +190,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 34                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 35                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -1486,7 +1484,15 @@ class CustomizeDialog(QDialog):
             self.outfit_buttons[key] = b
             og.addWidget(b, i // 4, i % 4)
         col.addLayout(og)
-        self.style_buttons = {}          # (the old 3D / drawn choice: every outfit is 3D now)
+        srow = self.hrow()
+        self.style_buttons = {}
+        for key, label in (("3d", "3D outfits"), ("drawn", "Drawn outfits")):
+            b = self.option(label)
+            b.clicked.connect(lambda *a, k=key: self.pick_style(k))
+            self.style_buttons[key] = b
+            srow.addWidget(b)
+        srow.addStretch(1)
+        col.addLayout(srow)
 
         col.addStretch(1)
         if self.in_room:
@@ -3661,6 +3667,11 @@ class Pet(QWidget):
         for key, label in ACC_MENU:
             self.add_toggle(om, label, self.acc_mode == key,
                             lambda v, k=key: self.set_outfit(k))
+        om.addSeparator()
+        self.add_toggle(om, "Style: 3D (rendered)", self.outfit_style == "3d",
+                        lambda v: self.set_outfit_style("3d"))
+        self.add_toggle(om, "Style: drawn (flat)", self.outfit_style == "drawn",
+                        lambda v: self.set_outfit_style("drawn"))
         self.add_toggle(menu, "Game mode", self.game_mode, self.set_game_mode)
         self.add_toggle(menu, "Stream mode (sit quietly in the corner)",
                         self.stream_manual, self.set_stream_manual)
@@ -5513,7 +5524,7 @@ class Pet(QWidget):
         target = QRectF(15, 38 + 20 - extra, 190, 207 + extra)
         self.draw_layers(q, target, pm, hl, self.bottom_for(state, idx))
         if acc and not used_3d:
-            self.draw_accessory_3d(q, 20, acc)      # drawn stand-in until its 3D pictures arrive
+            self.draw_pinned_accessory(q, pm, target, acc)      # drawn outfit, pinned to her head
         q.end()
         return out
 
@@ -5586,7 +5597,7 @@ class Pet(QWidget):
             if d.get("outfit") in ACC_MODES:
                 self.acc_mode = d["outfit"]
             if d.get("style") in ("3d", "drawn"):
-                self.outfit_style = "3d"       # drawn outfits retired: everything has 3D pictures
+                self.outfit_style = d["style"]
             if d.get("hairstyle") in [k for k, _ in HAIR_STYLES]:
                 self.hairstyle = d["hairstyle"]
             if d.get("bottom") in [k for k, _ in BOTTOMS]:
@@ -7012,6 +7023,49 @@ class Pet(QWidget):
             p.drawRoundedRect(QRectF(58, 184 + b, 104, 16), 8, 8)
             p.drawRoundedRect(QRectF(128, 194 + b, 16, 30), 6, 6)
 
+    def head_anchor(self, pm):
+        """Where the top-middle of her head is in this picture (cached): (x, y) in its pixels."""
+        cache = self.__dict__.setdefault("anchor_cache", {})
+        key = pm.cacheKey()
+        if key in cache:
+            return cache[key]
+        img = pm.toImage().scaled(pm.width() // 4, pm.height() // 4)
+        w, h = img.width(), img.height()
+        top, xs = None, []
+        for y in range(h):
+            row = [x for x in range(int(w * 0.2), int(w * 0.8)) if img.pixelColor(x, y).alpha() > 140]
+            if row:
+                if top is None:
+                    top = y
+                xs += row
+                if y - top >= h * 0.08:
+                    break
+        res = None if top is None else ((sum(xs) / len(xs)) * 4 + 2, top * 4)
+        if len(cache) > 400:
+            cache.clear()
+        cache[key] = res
+        return res
+
+    def draw_pinned_accessory(self, p, pm, target, acc):
+        """A drawn outfit, moved to wherever her head is in this picture (it follows every pose)."""
+        here = self.head_anchor(pm)
+        ref_pm = (self.frames.get("idle") or [None])[0]
+        ref = self.head_anchor(ref_pm) if ref_pm is not None else None
+        if here is None or ref is None:
+            self.draw_accessory_3d(p, int(target.y() - 38), acc)
+            return
+        sx = target.width() / pm.width()
+        sy = target.height() / pm.height()
+        ref_extra = (ref_pm.height() - 480) * 0.431
+        rx = 15 + ref[0] * 190 / ref_pm.width()
+        ry = 38 - ref_extra + ref[1] * (207 + ref_extra) / ref_pm.height()
+        nx = target.x() + here[0] * sx
+        ny = target.y() + here[1] * sy
+        p.save()
+        p.translate(nx - rx, ny - ry)
+        self.draw_accessory_3d(p, 0, acc)
+        p.restore()
+
     def draw_accessory_3d(self, p, b, acc):
         """Outfits sized for her 3D body (head center ~ (110, 90), neck ~ y 131)."""
         dark = QColor("#1b1b1b")
@@ -7311,9 +7365,9 @@ class Pet(QWidget):
                     hx = (hp.height() - 480) * 0.431
                     p.drawPixmap(QRectF(15, 38 + b - hx, 190, 207 + hx), hp, QRectF(hp.rect()))
             acc = self.current_accessory()
-            if (acc and not self.bed and not (dressed and state in dressed)
+            if (acc and not self.bed and not dressed
                     and not state.startswith("peek") and state in ACC_DROP_OK):
-                self.draw_accessory_3d(p, b + ACC_DROP.get(state, 0), acc)
+                self.draw_pinned_accessory(p, pm, target, acc)
         elif self.singing and self.dance_enabled:
             p.translate(110, 150)
             p.rotate(7 * math.sin(self.t / 5))
