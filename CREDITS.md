@@ -17,3 +17,9 @@
   scratch for Digi (`studio/make_chimes.py`).
 
 CC0 sounds don't require credit, but thank you to the people who recorded them!
+
+## 3D models
+
+- **Sun hat**: "Straw-Hat with 2 Shape-Keys" by grs, from
+  [Blend Swap](https://blendswap.com/blend/22499) (Creative Commons 0). Resized to fit Digi and
+  given her own straw and ribbon colors (`studio/models/StrawHat.blend`).

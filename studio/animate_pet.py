@@ -11,7 +11,7 @@ import math
 import os
 import sys
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "pet_frames")
@@ -570,6 +570,104 @@ for sx in (-1, 1):
     o.scale = (1.3, 0.5, 0.75)
     OUTFITS["sunhat"].append(hat_part(o, ribbon_blue, SUNHAT, (0.53 + 0.11 * sx, -0.56, 0.14),
                                       (0, math.radians(20 * sx), math.radians(-45))))
+
+
+# ---- the real straw hat: "Straw-Hat with 2 Shape-Keys" by grs (Blend Swap, CC0). If it's in
+# studio/models, it replaces the simple one above: fitted so the crown hugs her hair and the
+# brim is as wide as ours, in our own straw and ribbon colors.
+SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
+SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.8
+SUNHAT_SHAPES = {}                       # shape key name -> value, once we know what they do
+
+
+def import_strawhat(path):
+    info = []
+    with bpy.data.libraries.load(path, link=False) as (src, dst):
+        dst.objects = [n for n in src.objects if n.startswith("Strawhat") or n == "Band"]
+    objs = [o for o in dst.objects if o is not None and o.type == "MESH"]
+    for o in objs:
+        bpy.context.collection.objects.link(o)
+    update()
+    # bake each piece's placement into its mesh (and its shape keys), then forget parents
+    for o in objs:
+        mw = o.matrix_world.copy()
+        o.parent = None
+        o.data.transform(mw)
+        if o.data.shape_keys:
+            for kb in o.data.shape_keys.key_blocks:
+                for d in kb.data:
+                    d.co = mw @ d.co
+        o.matrix_world = Matrix()
+        info.append("%s: verts %d, modifiers %s, shape keys %s" % (
+            o.name, len(o.data.vertices), [(m.type, m.name) for m in o.modifiers],
+            [kb.name for kb in o.data.shape_keys.key_blocks] if o.data.shape_keys else None))
+    body = next(o for o in objs if o.name.startswith("Strawhat") and "Ribbon" not in o.name)
+    vs = [v.co.copy() for v in body.data.vertices]
+    cx = (min(v.x for v in vs) + max(v.x for v in vs)) / 2
+    cy = (min(v.y for v in vs) + max(v.y for v in vs)) / 2
+    rr = [math.hypot(v.x - cx, v.y - cy) for v in vs]
+    rmax = max(rr)
+    brim_z = sorted(v.z for v, r in zip(vs, rr) if r > 0.75 * rmax)
+    brim_top = brim_z[int(len(brim_z) * 0.9)]
+    crown = [(v, r) for v, r in zip(vs, rr) if v.z > brim_top + 0.02 * rmax and r < 0.7 * rmax]
+    ztop = max(v.z for v in vs)
+    low = sorted(r for v, r in crown if v.z < brim_top + (ztop - brim_top) * 0.4) or [rmax * 0.5]
+    crown_r = low[int(len(low) * 0.9)]
+    info.append("raw: center (%.3f, %.3f), brim radius %.3f, brim top z %.3f, crown radius %.3f, "
+                "top z %.3f, z min %.3f" % (cx, cy, rmax, brim_top, crown_r, ztop, min(v.z for v in vs)))
+    s = SUNHAT_BRIM_R / rmax
+    c = crown_r * s
+    f = max(1.0, SUNHAT_CROWN_R / c)            # widen just the crown if it's too small for her hair
+    c2 = max(c * 1.35, c * f * 1.1)
+
+    def fit(p):
+        q = Vector(((p.x - cx) * s, (p.y - cy) * s, (p.z - brim_top) * s))
+        r = math.hypot(q.x, q.y)
+        if r > 1e-6 and f > 1.0:
+            if r <= c:
+                k = f
+            elif r < c2:
+                k = (c * f + (r - c) * (c2 - c * f) / (c2 - c)) / r
+            else:
+                k = 1.0
+            q.x *= k
+            q.y *= k
+        return q
+
+    for o in objs:
+        for v in o.data.vertices:
+            v.co = fit(v.co)
+        if o.data.shape_keys:
+            for kb in o.data.shape_keys.key_blocks:
+                for d in kb.data:
+                    d.co = fit(d.co)
+        for m in o.modifiers:                   # sizes in modifiers scale with the hat
+            for attr in ("thickness", "width"):
+                if isinstance(getattr(m, attr, None), float):
+                    setattr(m, attr, getattr(m, attr) * s)
+        if o.data.shape_keys:
+            for kb in o.data.shape_keys.key_blocks[1:]:
+                kb.value = SUNHAT_SHAPES.get(kb.name, 0.0)
+        o.data.materials.clear()
+        for poly in o.data.polygons:
+            poly.material_index = 0
+    info.append("fit: scale %.3f, crown widened x%.2f" % (s, f))
+    try:
+        with open(os.path.join(HERE, "sunhat_info.txt"), "w") as fh:
+            fh.write("\n".join(info) + "\n")
+    except OSError:
+        pass
+    parts = []
+    for o in objs:
+        mat = straw if o is body else ribbon_blue
+        parts.append(hat_part(o, mat, SUNHAT, (0, 0, 0)))
+    return parts
+
+
+if os.path.exists(SUNHAT_BLEND):
+    for o in OUTFITS["sunhat"]:
+        bpy.data.objects.remove(o, do_unlink=True)
+    OUTFITS["sunhat"] = import_strawhat(SUNHAT_BLEND)
 
 def rod(a, b, radius, mat, parent):
     """A thin bar from a to b (like stick(), which is defined further down)."""
