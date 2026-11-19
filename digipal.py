@@ -182,7 +182,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 30                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 31                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -202,6 +202,8 @@ DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 MED_CHOICES = (5, 10, 15, 20, 30)        # minutes
 MED_SOUNDS = [("none", "None"), ("white", "White noise"), ("pink", "Pink noise"),
               ("forest", "Forest"), ("river", "River"), ("waves", "Waves")]
+MED_CHIMES = [("bell", "Soft bell"), ("bowl", "Singing bowl"), ("windchimes", "Wind chimes"),
+              ("gong", "Gong"), ("tingsha", "Tingsha"), ("none", "None")]
 MED_LATER = 30                           # "Later": she asks again in this many minutes
 MED_ANSWER_WAIT = 180                    # no answer this long: she quietly treats it as "Later"
 BREATH = (("Breathe in...", 4), ("Hold...", 4), ("Breathe out...", 6))   # seconds per step
@@ -1662,6 +1664,22 @@ class CustomizeDialog(QDialog):
         row.addWidget(self.med_vol)
         col.addLayout(row)
 
+        col.addWidget(self.heading("Beginning chime"))
+        lab = QLabel("Rings when a meditation starts. Tap one to hear it.")
+        lab.setWordWrap(True)
+        col.addWidget(lab)
+        row = self.hrow()
+        self.chime_buttons = {}
+        self.chime_group = QButtonGroup(self)
+        self.chime_group.setExclusive(True)
+        for key, label in MED_CHIMES:
+            b = self.option(label)
+            self.chime_group.addButton(b)
+            b.clicked.connect(lambda *a, k=key: self.pick_med_chime(k))
+            self.chime_buttons[key] = b
+            row.addWidget(b)
+        col.addLayout(row)
+
         col.addWidget(self.heading("Breathing guide"))
         row = self.hrow()
         self.guide_buttons = {}
@@ -1696,6 +1714,12 @@ class CustomizeDialog(QDialog):
             self.pet.preview_until = 0
             if key != "none":
                 self.pet.listen_sample(key)
+        self.refresh()
+
+    def pick_med_chime(self, key):
+        self.pet.med_chime = key
+        self.pet.save_custom()
+        self.pet.play_chime(key)
         self.refresh()
 
     def listen(self):
@@ -1945,6 +1969,8 @@ class CustomizeDialog(QDialog):
             b.setChecked(k == pet.bubble_mode)
         for k, b in getattr(self, "sound_buttons", {}).items():
             b.setChecked(k == pet.med_sound)
+        for k, b in getattr(self, "chime_buttons", {}).items():
+            b.setChecked(k == pet.med_chime)
         for k, b in getattr(self, "guide_buttons", {}).items():
             b.setChecked(k == pet.med_guide)
         if hasattr(self, "med_stats"):
@@ -2815,6 +2841,7 @@ class Pet(QWidget):
         self.med_pending = []             # reminders that waited until she was done
         self.med_phase = -1
         self.med_sound = "none"           # background sound while meditating
+        self.med_chime = "bell"           # the chime that starts a meditation
         self.med_volume = 0.5
         self.sound_player = None
         self.sound_key = None
@@ -5487,7 +5514,7 @@ class Pet(QWidget):
                            "med_days": self.med_days[-400:], "med_total": self.med_total,
                            "med_guide": self.med_guide, "med_time": self.med_time,
                            "med_asked_day": self.med_asked_day, "med_sound": self.med_sound,
-                           "med_volume": self.med_volume}, f)
+                           "med_volume": self.med_volume, "med_chime": self.med_chime}, f)
         except Exception:
             pass
 
@@ -5518,6 +5545,8 @@ class Pet(QWidget):
             self.med_time = d.get("med_time")
         if d.get("med_sound") in [k for k, _ in MED_SOUNDS]:
             self.med_sound = d["med_sound"]
+        if d.get("med_chime") in [k for k, _ in MED_CHIMES]:
+            self.med_chime = d["med_chime"]
         if isinstance(d.get("med_volume"), (int, float)):
             self.med_volume = max(0.0, min(1.0, float(d["med_volume"])))
         if isinstance(d.get("med_asked_day"), str):
@@ -5980,7 +6009,29 @@ class Pet(QWidget):
     }
 
     def play_chime(self, kind="end"):
-        """A soft bell (falls back to the system sound)."""
+        """A soft bell (falls back to the system sound). "start" plays the chime you picked."""
+        if kind == "start":
+            kind = self.med_chime
+        if kind == "none":
+            return
+        shipped = self.sound_file("chime_" + kind)
+        if shipped:
+            try:
+                from PySide6.QtMultimedia import QSoundEffect
+                if not hasattr(self, "chimes"):
+                    self.chimes = {}
+                ch = self.chimes.get("file_" + kind)
+                if ch is None:
+                    ch = QSoundEffect(self)
+                    ch.setSource(QUrl.fromLocalFile(shipped))
+                    ch.setVolume(0.7)
+                    self.chimes["file_" + kind] = ch
+                ch.play()
+                return
+            except Exception as ex:
+                print("chime:", ex, file=sys.stderr, flush=True)
+        if kind not in self.CHIMES:
+            kind = "start"                       # no file: the built-in soft bell
         try:
             from PySide6.QtMultimedia import QSoundEffect
             import tempfile
