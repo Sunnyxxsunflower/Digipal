@@ -1123,7 +1123,7 @@ def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40):
     ds = length / rings
     for k in range(rings + 1):
         sk = min(k / rings, 0.995)
-        u = min(1.0, max(0.0, (sk - 0.5) / 0.14)) if fold else 0.0
+        u = min(1.0, max(0.0, (sk - 0.46) / 0.26)) if fold else 0.0    # a slow, soft bend
         th = math.radians(fold) * u * u * (3 - 2 * u)   # bend angle so far (a soft fold)
         d = Vector((side * math.sin(th), 0.12 * sk, math.cos(th))).normalized()
         xa = Vector((math.cos(th), 0, -side * math.sin(th)))          # across the ear
@@ -1151,7 +1151,7 @@ def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40):
             f = bm.faces.new((a[j], a[j2], b[j2], b[j]))
             ph = 2 * math.pi * (j + 0.5) / around
             sm = (ring_s[k] + ring_s[k + 1]) / 2
-            if math.sin(ph) < -0.3 and abs(math.cos(ph)) < 0.72 and 0.1 < sm < 0.88:
+            if math.sin(ph) < -0.3 and abs(math.cos(ph)) < 0.72 and 0.2 < sm < 0.88:
                 f.material_index = 1                # the pink inside of the ear
     for ring, s_ in ((ring_verts[0], True), (ring_verts[-1], False)):   # close both ends
         c = bm.verts.new(sum((v.co for v in ring), Vector()) / len(ring))
