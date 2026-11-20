@@ -83,6 +83,33 @@ TOOL_FLAG = Qt.Tool if HELPER else Qt.Widget
 # away from whatever you're working in. Digi only ever wants to be seen, never to grab the keyboard.
 os.environ.setdefault("QT_MAC_SET_RAISE_PROCESS", "0")
 
+
+
+def mac_keep_floating(widget):
+    """Mac: keep one of Digi's windows floating above your other windows, on every desktop,
+    without ever making her app active (so she never takes your typing). Qt sets this when the
+    window first shows, but it can get lost later and then she ends up hidden behind a window."""
+    if not (IS_MAC and HAS_APPKIT) or widget is None or not widget.isVisible():
+        return
+    try:
+        import objc
+        import AppKit
+        win = objc.objc_object(c_void_p=int(widget.winId())).window()
+        if win is None:
+            return
+        if win.level() < AppKit.NSFloatingWindowLevel:
+            win.setLevel_(AppKit.NSFloatingWindowLevel)
+            win.orderFrontRegardless()            # back on top, without activating her app
+        if win.hidesOnDeactivate():
+            win.setHidesOnDeactivate_(False)
+        want = (AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
+                | AppKit.NSWindowCollectionBehaviorFullScreenAuxiliary)
+        if (win.collectionBehavior() & want) != want:
+            win.setCollectionBehavior_(win.collectionBehavior() | want)
+    except Exception as ex:
+        print("keep floating:", ex, file=sys.stderr, flush=True)
+
+
 # can she see where other windows are (to sit on them / peek around them)?
 HAS_WINLIST = HAS_QUARTZ or (HELPER and W is not None)
 
@@ -6956,6 +6983,9 @@ class Pet(QWidget):
 
     def tick(self):
         self.t += 1
+        if IS_MAC and self.t % 50 == 1:                # every 2 seconds: still floating on top?
+            for w in (self, self.bubble_win, self.choice_bar):
+                mac_keep_floating(w)
         try:
             if self.bubble_win is None:
                 self.bubble_win = BubbleWin(self)
