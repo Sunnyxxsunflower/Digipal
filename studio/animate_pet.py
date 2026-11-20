@@ -1416,8 +1416,9 @@ OUTFITS["book"].append(hat_part(item_box((0.02, BT, BH)), book_spine, BOOK,
 # the front cover art. Nancy's own drawing goes in the studio folder as "book_cover.png"
 # (any size, shaped like the cover: 34 wide by 42 tall, e.g. 1020 x 1260). Until it's there,
 # a placeholder: a gold border and a gold dragon.
-BOOK_ART = os.path.join(HERE, "book_cover.png")
-if os.path.exists(BOOK_ART):
+BOOK_ART = next((os.path.join(HERE, f) for f in sorted(os.listdir(HERE))
+                 if f.lower() == "book_cover.png"), "")     # Book_Cover.png works too
+if BOOK_ART:
     art = bpy.data.materials.new("of_bookart")
     art.use_nodes = True
     nt = art.node_tree
