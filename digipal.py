@@ -13,7 +13,7 @@ from datetime import datetime, date, timedelta
 from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, QRect
 from PySide6.QtGui import (QFontMetrics, QPainter, QColor, QPen, QBrush, QPolygonF,
                            QFont, QGuiApplication, QTextOption, QCursor,
-                           QRegion, QPixmap, QPainterPath, QRadialGradient)
+                           QRegion, QPixmap, QPainterPath, QRadialGradient, QTextCursor)
 from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QDialog, QVBoxLayout, QHBoxLayout, QListWidget,
                                QListWidgetItem, QPushButton, QLabel, QLineEdit,
@@ -2052,6 +2052,8 @@ class CustomizeDialog(QDialog):
 
         # notes
         col.addWidget(self.heading("Session notes \U0001F4DC"))
+        col.addLayout(self.small_buttons([("Pop out \u2197 (keep it open while you play)",
+                                           lambda *a: self.pet.open_dnd_notes(self.notes_game.currentIndex()))]))
         self.notes_game = QComboBox()
         self.notes_game.currentIndexChanged.connect(self.notes_show)
         col.addWidget(self.notes_game)
@@ -2062,10 +2064,6 @@ class CustomizeDialog(QDialog):
         self.notes_box.setMinimumHeight(140)
         self.notes_box.textChanged.connect(self.notes_changed)
         col.addWidget(self.notes_box)
-        self.notes_timer = QTimer(self)
-        self.notes_timer.setSingleShot(True)
-        self.notes_timer.setInterval(1200)
-        self.notes_timer.timeout.connect(self.pet.save_custom)
         note = QLabel("Your games and notes stay only on this computer.")
         note.setStyleSheet("color: #6b5f93; font-size: 11px;")
         col.addWidget(note)
@@ -2195,7 +2193,7 @@ class CustomizeDialog(QDialog):
         self.init_name.clear()
         self.init_roll.setValue(10)
         self.pet.save_custom()
-        self.refresh_init()
+        self.pet.dnd_views_refresh()
 
     def init_d20(self):
         name = self.init_name.text().strip()
@@ -2210,7 +2208,6 @@ class CustomizeDialog(QDialog):
 
     def init_next(self):
         self.pet.dnd_next_turn()
-        self.refresh_init()
 
     def init_remove(self):
         i = self.init_list.currentRow()
@@ -2223,7 +2220,7 @@ class CustomizeDialog(QDialog):
         if ini["turn"] >= len(ini["order"]):
             ini["turn"] = 0
         self.pet.save_custom()
-        self.refresh_init()
+        self.pet.dnd_views_refresh()
 
     def init_clear(self):
         if not self.pet.dnd_init["order"]:
@@ -2232,7 +2229,7 @@ class CustomizeDialog(QDialog):
                                 "Clear everyone from initiative? (Combat's over!)") == QMessageBox.Yes:
             self.pet.dnd_init = {"order": [], "turn": 0, "round": 1}
             self.pet.save_custom()
-            self.refresh_init()
+            self.pet.dnd_views_refresh()
 
     def notes_show(self, *a):
         i = self.notes_game.currentIndex()
@@ -2252,8 +2249,7 @@ class CustomizeDialog(QDialog):
     def notes_changed(self):
         i = self.notes_game.currentIndex()
         if 0 <= i < len(self.pet.dnd_games):
-            self.pet.dnd_games[i]["notes"] = self.notes_box.toPlainText()[:20000]
-            self.notes_timer.start()
+            self.pet.dnd_notes_set(i, self.notes_box.toPlainText(), self)
 
     def show_page(self, i):
         if not self.in_room:
@@ -2863,6 +2859,142 @@ class ReminderEdit(QDialog):
         if not days or len(days) == 7:
             return (when, text)
         return (when, text, days)
+
+
+class DndNotesWindow(QWidget):
+    """A small notes window you can keep open beside your game (big, easy-to-read text),
+    with whose turn it is at the bottom."""
+
+    def __init__(self, pet):
+        super().__init__(None)
+        self.pet = pet
+        self.setWindowTitle("D&D notes")
+        self.setWindowFlag(Qt.Window, True)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, bool(pet.dnd_opts.get("notes_pin", True)))
+        self.setStyleSheet("""
+            QWidget { background: #f6f3fb; color: #3a3159; }
+            QPlainTextEdit { background: white; border: 1px solid #ddd5ef; border-radius: 8px; padding: 4px; }
+            QComboBox { background: white; border: 1px solid #c9bfe3; border-radius: 6px; padding: 2px 6px; }
+            QPushButton { padding: 3px 9px; border-radius: 8px; border: 1px solid #c9bfe3; background: white; }
+            QPushButton:hover { background: #efeaf9; }
+            QPushButton:checked { background: #a99be0; color: white; border-color: #6b5f93; }
+            QLabel#turn { font-weight: bold; color: #4b3f7a; }
+        """)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(8, 8, 8, 8)
+        top = QHBoxLayout()
+        self.game = QComboBox()
+        self.game.currentIndexChanged.connect(self.load)
+        top.addWidget(self.game, 1)
+        for label, step, tip in (("A\u2212", -1, "Smaller text"), ("A+", 1, "Bigger text")):
+            b = QPushButton(label)
+            b.setToolTip(tip)
+            b.clicked.connect(lambda *a, st=step: self.font_step(st))
+            top.addWidget(b)
+        self.pin = QPushButton("\U0001F4CC")
+        self.pin.setToolTip("Keep this window on top of everything")
+        self.pin.setCheckable(True)
+        self.pin.setChecked(bool(pet.dnd_opts.get("notes_pin", True)))
+        self.pin.toggled.connect(self.set_pin)
+        top.addWidget(self.pin)
+        lay.addLayout(top)
+        self.box = QPlainTextEdit()
+        self.box.setPlaceholderText("NPC names, loot, clues, what happened last time...")
+        self.box.textChanged.connect(self.changed)
+        lay.addWidget(self.box, 1)
+        bottom = QHBoxLayout()
+        self.turn = QLabel()
+        self.turn.setObjectName("turn")
+        bottom.addWidget(self.turn, 1)
+        self.next_btn = QPushButton("Next turn \u25B6")
+        self.next_btn.clicked.connect(self.next_turn)
+        bottom.addWidget(self.next_btn)
+        lay.addLayout(bottom)
+        self.apply_font()
+        geo = pet.dnd_opts.get("notes_geo")
+        if isinstance(geo, list) and len(geo) == 4:
+            self.setGeometry(*[int(v) for v in geo])
+            scr = QGuiApplication.screenAt(self.geometry().center())
+            if scr is None:                       # that screen is gone: start somewhere visible
+                self.resize(int(geo[2]), int(geo[3]))
+                self.move(120, 120)
+        else:
+            self.resize(380, 460)
+
+    def refresh(self, index=None):
+        games = self.pet.dnd_games
+        keep = self.game.currentIndex() if index is None else index
+        self.game.blockSignals(True)
+        self.game.clear()
+        for g in games:
+            self.game.addItem(g["title"])
+        self.game.setCurrentIndex(min(max(keep, 0), len(games) - 1) if games else -1)
+        self.game.blockSignals(False)
+        self.load()
+        self.refresh_init()
+
+    def load(self, *a):
+        i = self.game.currentIndex()
+        games = self.pet.dnd_games
+        text = games[i]["notes"] if 0 <= i < len(games) else ""
+        if self.box.toPlainText() != text:
+            self.box.blockSignals(True)
+            self.box.setPlainText(text)
+            self.box.moveCursor(QTextCursor.End)
+            self.box.blockSignals(False)
+        self.box.setEnabled(0 <= i < len(games))
+
+    def changed(self):
+        i = self.game.currentIndex()
+        if 0 <= i < len(self.pet.dnd_games):
+            self.pet.dnd_notes_set(i, self.box.toPlainText(), self)
+
+    def refresh_init(self):
+        who = self.pet.dnd_turn_name()
+        if who:
+            self.turn.setText(f"\u2694\ufe0f Round {self.pet.dnd_init['round']} \u00b7 {who}'s turn")
+        else:
+            self.turn.setText("No initiative yet (add it in Customize \u2192 D&D)")
+        self.next_btn.setEnabled(bool(who))
+
+    def next_turn(self):
+        self.pet.dnd_next_turn()
+
+    def apply_font(self):
+        size = int(self.pet.dnd_opts.get("notes_font", 15))
+        f = self.box.font()
+        f.setPointSize(size)
+        self.box.setFont(f)
+
+    def font_step(self, step):
+        self.pet.dnd_opts["notes_font"] = max(10, min(32, int(self.pet.dnd_opts.get("notes_font", 15)) + step * 2))
+        self.apply_font()
+        self.pet.save_custom()
+
+    def set_pin(self, on):
+        self.pet.dnd_opts["notes_pin"] = bool(on)
+        geo = self.geometry()
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, bool(on))
+        self.setGeometry(geo)
+        self.show()                               # changing that flag hides the window: bring it back
+        self.pet.save_custom()
+
+    def remember_place(self):
+        g = self.geometry()
+        self.pet.dnd_opts["notes_geo"] = [g.x(), g.y(), g.width(), g.height()]
+        self.pet.save_custom()
+
+    def moveEvent(self, e):
+        super().moveEvent(e)
+        self.pet.dnd_place_later()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.pet.dnd_place_later()
+
+    def closeEvent(self, e):
+        self.remember_place()
+        super().closeEvent(e)
 
 
 class DndGameEdit(QDialog):
@@ -4622,6 +4754,7 @@ class Pet(QWidget):
         ddm = pm.addMenu("\U0001F409 D&D")
         if self.dnd_init["order"]:
             ddm.addAction(f"Next turn (now: {self.dnd_turn_name()})", self.dnd_next_turn)
+        ddm.addAction("\U0001F4DC Session notes (pop out)", lambda *a: self.open_dnd_notes())
         ddm.addAction("My games, notes and initiative...", lambda *a: self.open_customize(4))
 
         om = menu.addMenu("\U0001F457 Outfit")
@@ -6634,9 +6767,14 @@ class Pet(QWidget):
             self.dnd_games = [clean_dnd_game({"title": "Game night", "days": self.dnd_days,
                                               "start": "19:00", "hours": 4})]
         if isinstance(d.get("dnd_opts"), dict):
-            for k in ("use_name", "dress"):
+            for k in ("use_name", "dress", "notes_pin"):
                 if k in d["dnd_opts"]:
                     self.dnd_opts[k] = bool(d["dnd_opts"][k])
+            if isinstance(d["dnd_opts"].get("notes_font"), (int, float)):
+                self.dnd_opts["notes_font"] = max(10, min(32, int(d["dnd_opts"]["notes_font"])))
+            geo = d["dnd_opts"].get("notes_geo")
+            if isinstance(geo, list) and len(geo) == 4 and all(isinstance(v, (int, float)) for v in geo):
+                self.dnd_opts["notes_geo"] = [int(v) for v in geo]
         ini = d.get("dnd_init")
         if isinstance(ini, dict) and isinstance(ini.get("order"), list):
             order = [[str(e[0])[:24], int(e[1])] for e in ini["order"]
@@ -7540,6 +7678,12 @@ class Pet(QWidget):
         self.dnd_sync_days()
         self.dnd_cache = (0.0, None)
         self.save_custom()
+        nw = getattr(self, "notes_win", None)
+        if nw is not None:
+            if self.dnd_games:
+                nw.refresh()
+            else:
+                nw.close()
 
     def call_name(self):
         """What she calls you: your table name during a game (if you want), else your nickname."""
@@ -7590,6 +7734,57 @@ class Pet(QWidget):
                 if not self.reminder_active:
                     self.say(f"{g['title']} starts in {mins} minutes! Dice ready? \U0001F3B2", 5000)
 
+    def open_dnd_notes(self, index=None):
+        """The pop-out notes window (opens on the game that's on now, if there is one)."""
+        if not self.dnd_games:
+            self.say("Add a game first, then you can take notes for it~ \U0001F4DC", 3000)
+            self.open_customize(4)
+            return
+        if index is None or index < 0:
+            cur = self.dnd_now()
+            index = self.dnd_games.index(cur[0]) if cur and cur[0] in self.dnd_games else 0
+        if getattr(self, "notes_win", None) is None:
+            self.notes_win = DndNotesWindow(self)
+        self.notes_win.refresh(index)
+        self.notes_win.show()
+        self.notes_win.raise_()
+        self.notes_win.activateWindow()
+
+    def dnd_notes_set(self, i, text, source=None):
+        """Notes typed in the D&D tab or the pop-out: kept, saved a moment later, shown in both."""
+        self.dnd_games[i]["notes"] = text[:20000]
+        if getattr(self, "notes_save", None) is None:
+            self.notes_save = QTimer(self)
+            self.notes_save.setSingleShot(True)
+            self.notes_save.setInterval(1200)
+            self.notes_save.timeout.connect(self.save_custom)
+        self.notes_save.start()
+        nw = getattr(self, "notes_win", None)
+        if nw is not None and nw is not source and nw.isVisible() and nw.game.currentIndex() == i:
+            nw.load()
+        cw = self.custom_win
+        if cw is not None and cw is not source and hasattr(cw, "notes_game") and cw.notes_game.currentIndex() == i:
+            cw.notes_show()
+
+    def dnd_place_later(self):
+        """The notes window moved or changed size: remember it once it settles."""
+        if getattr(self, "notes_place", None) is None:
+            self.notes_place = QTimer(self)
+            self.notes_place.setSingleShot(True)
+            self.notes_place.setInterval(1500)
+            self.notes_place.timeout.connect(lambda: self.notes_win.remember_place()
+                                             if getattr(self, "notes_win", None) else None)
+        self.notes_place.start()
+
+    def dnd_views_refresh(self):
+        """Initiative changed: update the D&D tab and the pop-out."""
+        nw = getattr(self, "notes_win", None)
+        if nw is not None:
+            nw.refresh_init()
+        cw = self.custom_win
+        if cw is not None and hasattr(cw, "init_list"):
+            cw.refresh_init()
+
     def dnd_turn_name(self):
         o = self.dnd_init["order"]
         return o[self.dnd_init["turn"] % len(o)][0] if o else None
@@ -7604,6 +7799,7 @@ class Pet(QWidget):
             self.dnd_init["turn"] = 0
             self.dnd_init["round"] += 1
         self.save_custom()
+        self.dnd_views_refresh()
         self.dnd_announce_turn()
 
     def dnd_announce_turn(self):
