@@ -581,17 +581,17 @@ SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 #   tuck: tuck away any hair poking out past the hat, back: how much shorter the brim is behind
 #   her (0-1), wave: soft ripples on the brim's edge, floppy: take the brim's swoopy shape from the
 #   model's own floppy pose (0-1), droop: extra brim droop (all around, at her sides),
-#   tail_drop: tie her ponytails this much lower while she wears it
+#   tail_drop: tie her ponytails this much lower while she wears it, size: the whole hat bigger/smaller
 SUNHAT_FITS = {
-    "twintails":  {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True,
+    "twintails":  {"crown_r": 0.84, "dy": 0.10, "dz": -0.22, "tilt": -30, "tuck": True,
                    "back": 0.4, "wave": 0.0, "floppy": 1.0, "droop": (0.0, 0.0),
-                   "tail_drop": 0.25},
-    "shorttails": {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True,
+                   "tail_drop": 0.25, "size": 0.95},
+    "shorttails": {"crown_r": 0.84, "dy": 0.10, "dz": -0.22, "tilt": -30, "tuck": True,
                    "back": 0.4, "wave": 0.0, "floppy": 1.0, "droop": (0.0, 0.0),
-                   "tail_drop": 0.25},
-    "drills":     {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True,
+                   "tail_drop": 0.25, "size": 0.95},
+    "drills":     {"crown_r": 0.84, "dy": 0.10, "dz": -0.22, "tilt": -30, "tuck": True,
                    "back": 0.4, "wave": 0.0, "floppy": 1.0, "droop": (0.0, 0.0),
-                   "tail_drop": 0.25},
+                   "tail_drop": 0.25, "size": 0.95},
 }
 SUNHAT_STYLE = {}                        # style -> (frame, hat objects, fit)
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.84        # a roomy inside, so her hair fits under the hat
@@ -781,6 +781,7 @@ if os.path.exists(SUNHAT_BLEND):
     for _style, _fit in SUNHAT_FITS.items():
         _fr = empty("SunHatFrame_" + _style, (0.0, _fit["dy"], 2.28 + _fit["dz"]), HEAD)
         _fr.rotation_euler = (math.radians(_fit["tilt"]), math.radians(-5), 0)
+        _fr.scale = (_fit.get("size", 1.0),) * 3
         SUNHAT_STYLE[_style] = (_fr, import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES,
                                                       crown_r=_fit["crown_r"], frame=_fr,
                                                       brim_back=_fit["back"], brim_wave=_fit["wave"],
