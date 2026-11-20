@@ -220,6 +220,13 @@ RPS_WIN = ["I win! Hehe~", "Yay, I got you!", "Victory! \u2728", "Ha! Better luc
 RPS_LOSE = ["Aww, you got me!", "Nooo~ you win this one!", "Hmph... nice one!", "You're too good!"]
 RPS_TIE = ["Same! Great minds~", "A tie! Again!", "Jinx! \U0001F440"]
 
+# guess which hand
+HAND_BUTTONS = [("\U0001F448\nThis one", "left"), ("\U0001F449\nThis one", "right"), ("\u2715", "close")]
+HAND_TREATS = ["a candy \U0001F36C", "a star \u2B50", "a gem \U0001F48E", "a cookie \U0001F36A",
+               "a d20 \U0001F3B2", "a flower \U0001F338", "a heart \U0001F49C", "a tiny dragon \U0001F409"]
+HAND_FOUND = ["You found it!", "Yes! That's the one!", "How did you know?!", "Wow, good guess!"]
+HAND_MISSED = ["Nope~ it was in my other hand!", "Hehe, wrong one!", "Not that one~", "So close!"]
+
 # trivia: (question, right answer, wrong, wrong, wrong[, fun fact]). Answers stay short: they're buttons.
 TRIVIA = {
     "anime": [
@@ -4280,6 +4287,8 @@ class Pet(QWidget):
         self.game = None                             # "trivia" / "rps" while you play: her only focus
         self.game_talking = False
         self.held_msgs = []                          # things she wanted to say mid-game (said after)
+        self.hand = None                             # guess which hand: {"treat", "in", "found", "tries", "streak"}
+        self.hand_best = 0                           # best streak ever
         self.trivia = None                           # a trivia round that's going on
         self.trivia_busy = False                     # between questions
         self.trivia_best = {}                        # best score per category
@@ -5229,6 +5238,7 @@ class Pet(QWidget):
             pm.addAction("Toss a ball!", self.toss_ball)
         pm.addAction("\u270A Rock, paper, scissors", self.play_rps)
         pm.addAction("\U0001F9E0 Trivia", self.play_trivia)
+        pm.addAction("\U0001F932 Guess which hand", self.play_hand)
         pm.addAction("Throw a bomb! \U0001F4A3", self.throw_bomb)
         dm = pm.addMenu("Roll dice")
         for sides in DICE:
@@ -5749,6 +5759,62 @@ class Pet(QWidget):
         self.game_say(f"{vs}  {line}\nYou {g[0]} \u00b7 Digi {g[1]}  (\u2715 to stop)", 45000)
         self.save_custom()
         self.show_choices(RPS_BUTTONS, self.rps_pick, big=True)    # ready for the next round
+
+    # ----- guess which hand -----
+    def play_hand(self):
+        self.start_game("hand")
+        self.hand = {"found": 0, "tries": 0, "streak": 0}
+        self.hand_hide(first=True)
+
+    def hand_hide(self, first=False):
+        h = self.hand
+        h["treat"] = random.choice(HAND_TREATS)
+        h["in"] = random.choice(("left", "right"))
+        self.trivia_busy = True              # she holds still while she hides it
+        self.game_say("I'm hiding something... shuffle shuffle~ \U0001F932" if first
+                      else "Okay, hiding it again... shuffle shuffle~", 1400)
+        QTimer.singleShot(1500, self.hand_ask)
+
+    def hand_ask(self):
+        self.trivia_busy = False
+        if not self.hand:
+            return
+        self.game_say("Which hand is it in? \U0001F440", 45000)
+        self.show_choices(HAND_BUTTONS, self.hand_pick, big=True)
+
+    def hand_pick(self, side):
+        h = self.hand
+        if not h:
+            return
+        if side == "close":
+            self.hand = None
+            if h["tries"]:
+                self.game_say(f"That was fun! You found it {h['found']} of {h['tries']} times \u2665", 3500)
+            else:
+                self.game_say("Okay, maybe later~", 2000)
+            self.end_game(3700 if h["tries"] else 2200)
+            return
+        h["tries"] += 1
+        if side == h["in"]:
+            h["found"] += 1
+            h["streak"] += 1
+            line = f"{random.choice(HAND_FOUND)} It was {h['treat']}!"
+            if h["streak"] >= 3:
+                line += f" {h['streak']} in a row! \U0001F525"
+            if h["streak"] > self.hand_best:
+                self.hand_best = h["streak"]
+                if h["streak"] >= 3:
+                    line += " New record!"
+                self.save_custom()
+            self.happy = 40
+            self.jump = 20
+        else:
+            h["streak"] = 0
+            line = f"{random.choice(HAND_MISSED)} It was {h['treat']}."
+            self.boop_until = time.time() + 1.2
+        self.game_say(line, 2600)
+        self.trivia_busy = True
+        QTimer.singleShot(2800, self.hand_hide)
 
     # ----- trivia -----
     def play_trivia(self):
@@ -7451,7 +7517,8 @@ class Pet(QWidget):
                            "med_asked_day": self.med_asked_day, "med_sound": self.med_sound,
                            "med_volume": self.med_volume, "med_chime": self.med_chime,
                            "intro_done": self.intro_done, "rps": self.rps,
-                           "trivia_best": self.trivia_best, "trivia_mine": self.trivia_mine}, f)
+                           "trivia_best": self.trivia_best, "trivia_mine": self.trivia_mine,
+                           "hand_best": self.hand_best}, f)
         except Exception:
             pass
 
@@ -7475,6 +7542,8 @@ class Pet(QWidget):
             # game nights from before the D&D tab: one game, 7pm on those days
             self.dnd_games = [clean_dnd_game({"title": "Game night", "days": self.dnd_days,
                                               "start": "19:00", "hours": 4})]
+        if isinstance(d.get("hand_best"), int):
+            self.hand_best = max(0, d["hand_best"])
         if isinstance(d.get("trivia_mine"), list):
             self.trivia_mine = [t for t in (clean_trivia(x) for x in d["trivia_mine"]) if t][:300]
         if isinstance(d.get("trivia_best"), dict):
