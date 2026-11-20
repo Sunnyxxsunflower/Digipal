@@ -1110,12 +1110,12 @@ OUTFITS["beret"].append(hat_part(o, gold_pin, PIN, (0, 0, 0.03)))               
 
 # bunny ears, sculpted as one smooth piece each (not stacked balls): narrow where they meet her
 # head, wide in the middle, a round tip, a soft cupped front with the pink inside, curving back a
-# little. The left one stands up; the right one bends over outward partway up, in one soft fold.
+# little. The left one stands up; the right one flops forward partway up, in one soft fold.
 bunny_white = outfit_mat("of_bunny", "#fbf8ff", 0.8)
 
 
-def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40):
-    """fold: how far the top bends over sideways (degrees, toward `side`)."""
+def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40, forward=False):
+    """fold: how far the top bends over (degrees): sideways toward `side`, or toward you if forward."""
     import bmesh
     bm = bmesh.new()
     ring_verts, ring_s = [], []
@@ -1125,9 +1125,14 @@ def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40):
         sk = min(k / rings, 0.995)
         u = min(1.0, max(0.0, (sk - 0.46) / 0.26)) if fold else 0.0    # a slow, soft bend
         th = math.radians(fold) * u * u * (3 - 2 * u)   # bend angle so far (a soft fold)
-        d = Vector((side * math.sin(th), 0.12 * sk, math.cos(th))).normalized()
-        xa = Vector((math.cos(th), 0, -side * math.sin(th)))          # across the ear
-        ya = d.cross(xa).normalized() * (-1 if d.cross(xa).y < 0 else 1)  # front-to-back
+        if forward:                             # flops over toward you, like a floppy bunny ear
+            d = Vector((0, 0.12 * sk * (1 - u) - math.sin(th), math.cos(th))).normalized()
+            xa = Vector((1, 0, 0))
+            ya = d.cross(xa).normalized()      # the ear's back side (the front is -ya)
+        else:
+            d = Vector((side * math.sin(th), 0.12 * sk, math.cos(th))).normalized()
+            xa = Vector((math.cos(th), 0, -side * math.sin(th)))          # across the ear
+            ya = d.cross(xa).normalized() * (-1 if d.cross(xa).y < 0 else 1)  # front-to-back
         cap = math.sqrt(max(0.0, 1 - ((sk - 0.7) / 0.3) ** 2)) if sk > 0.7 else 1.0
         w = (0.08 + 0.07 * math.sin(math.pi * sk * 0.85)) * cap      # width
         t = (0.06 - 0.02 * sk) * cap                                  # thickness
@@ -1172,7 +1177,7 @@ for sx, lean in ((-1, 12), (1, 16)):
     r = 0.5
     root = empty("BunnyEar%d" % sx, (r * math.sin(ang), 0.02, 2.015 + r * math.cos(ang)), HEAD)
     root.rotation_euler = (0, math.radians(lean) * sx, 0)
-    o = bunny_ear("BunnyEarMesh%d" % sx, sx, fold=0.0 if sx < 0 else 105.0)
+    o = bunny_ear("BunnyEarMesh%d" % sx, sx, fold=0.0 if sx < 0 else 110.0, forward=True)
     o = hat_part(o, bunny_white, root, (0, 0, 0))
     o.data.materials.append(ear_in)
     OUTFITS["bunny"].append(o)
@@ -1257,9 +1262,11 @@ def ribbon_tail(name, sx, width=0.16, steps=24):
     pts = []
     for k in range(steps + 1):
         t = k / steps
+        fwd = math.sin(min(1.0, t * 3) * math.pi / 2)
         pts.append(Vector((sx * (0.3 + 0.5 * math.sin(t * math.pi * 0.5)) + 0.03 * math.sin(t * 7),
-                           -0.12 + 0.04 * t, 0.62 - 0.72 * t)))    # starts hidden behind the loops,
-                                                                    # hangs down at her sides
+                           -0.12 - 0.22 * fwd, 0.62 - 0.72 * t)))  # starts hidden behind the loops,
+                                                                    # then hangs down at her sides,
+                                                                    # in front of her ponytails
     rows = []
     for k, p in enumerate(pts):
         tan = (pts[min(k + 1, steps)] - pts[max(k - 1, 0)]).normalized()
@@ -1298,9 +1305,10 @@ bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.036)
 o = made()
 o.scale = (1, 1, 1.25)
 OUTFITS["bow"].append(hat_part(o, gold, BOW, (0.27, -0.21, 0.1)))         # hangs below the right loop
-# preview only: the same bow with just the big back loops ("bow_single"), to compare
-if "bow_single" in (sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []):
-    OUTFITS["bow_single"] = [o for o in OUTFITS["bow"] if not o.name.startswith("BowFront")]
+# Nancy picked the bow with just the big back loops: the small front loops go
+for o in [o for o in OUTFITS["bow"] if o.name.startswith("BowFront")]:
+    OUTFITS["bow"].remove(o)
+    bpy.data.objects.remove(o, do_unlink=True)
 
 
 # star clip on the right side, above her ear
