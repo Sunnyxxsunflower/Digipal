@@ -98,8 +98,35 @@ def mac_keep_floating(widget):
         if win is None:
             return
         if win.level() < AppKit.NSFloatingWindowLevel:
+            print("keep floating: level was %d, fixing" % win.level(), file=sys.stderr, flush=True)
             win.setLevel_(AppKit.NSFloatingWindowLevel)
             win.orderFrontRegardless()            # back on top, without activating her app
+        # is some other app's window sitting on top of her right now? then pop back in front
+        if HAS_QUARTZ:
+            above = Quartz.CGWindowListCopyWindowInfo(
+                Quartz.kCGWindowListOptionOnScreenAboveWindow
+                | Quartz.kCGWindowListExcludeDesktopElements, win.windowNumber()) or []
+            g = widget.frameGeometry()
+            me = os.getpid()
+            for info in above:
+                if info.get("kCGWindowOwnerPID") == me or info.get("kCGWindowAlpha", 1) < 0.05:
+                    continue
+                if info.get("kCGWindowLayer", 0) > win.level():
+                    continue                       # the menu bar, the Dock, pop-up menus...
+                b = info.get("kCGWindowBounds") or {}
+                x, y = b.get("X", 0), b.get("Y", 0)
+                w, h = b.get("Width", 0), b.get("Height", 0)
+                if x < g.right() and x + w > g.left() and y < g.bottom() and y + h > g.top():
+                    now = time.time()
+                    if now - getattr(widget, "_cover_note", 0) > 60:
+                        widget._cover_note = now
+                        print("keep floating: %s (layer %s) was covering her, my level %d" % (
+                            info.get("kCGWindowOwnerName"), info.get("kCGWindowLayer"),
+                            win.level()), file=sys.stderr, flush=True)
+                    if win.level() < AppKit.NSStatusWindowLevel:
+                        win.setLevel_(AppKit.NSStatusWindowLevel)   # one step higher, to be sure
+                    win.orderFrontRegardless()
+                    break
         if win.hidesOnDeactivate():
             win.setHidesOnDeactivate_(False)
         want = (AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
