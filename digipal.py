@@ -317,7 +317,7 @@ DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 # each game: {"title", "role": "dm"/"player", "char": what she calls you at the table,
 #             "days": ["Fri", ...], "start": "19:00", "hours": 4, "notes": "..."}
 DND_HEADS_UP = 30                # minutes before a game she gives you a heads-up
-DND_START_LINES = ["It's D&D time, {name}! Grab your dice~ \U0001F3B2",
+DND_START_LINES = ["It's {title} time, {name}! Grab your dice~ \U0001F3B2",
                    "Game time, {name}! May your rolls be high \u2728",
                    "Adventure awaits, {name}! \U0001F409"]
 DND_DM_LINES = ["Your players await, {name}! \U0001F4D6", "Time to run the game, {name}! You've got this~",
@@ -337,7 +337,7 @@ def clean_dnd_game(g):
         hours = max(0.5, min(12.0, float(g.get("hours", 4))))
     except (TypeError, ValueError):
         hours = 4.0
-    return {"title": str(g.get("title", "")).strip()[:40] or "D&D",
+    return {"title": str(g.get("title", "")).strip()[:40] or "Game night",
             "role": "dm" if g.get("role") == "dm" else "player",
             "char": str(g.get("char", "")).strip()[:24],
             "days": [d for d in DAY_ORDER if d in (g.get("days") or [])],
@@ -381,19 +381,26 @@ def dnd_notes_text(games):
     parts = []
     for g in games:
         t = datetime.strptime(g["start"], "%H:%M").strftime("%I:%M %p").lstrip("0")
-        role = "DM" if g["role"] == "dm" else "Player"
+        role = "GM" if g["role"] == "dm" else "Player"
         head = [g["title"], "=" * max(3, len(g["title"])),
                 f"{role}" + (f" as {g['char']}" if g["char"] else ""),
                 f"Game days: {', '.join(g['days']) or '(none)'} at {t}", ""]
         parts.append("\n".join(head) + "\n" + (g["notes"].strip() or "(no notes yet)") + "\n")
     stamp = datetime.now().strftime("%B %d, %Y").replace(" 0", " ")
-    return f"D&D notes from Digi \u00b7 saved {stamp}\n\n" + "\n\n".join(parts)
+    return f"Game night notes from Digi \u00b7 saved {stamp}\n\n" + "\n\n".join(parts)
+
+
+def gm_title(g):
+    """What she calls the person running the game: Dungeon Master for D&D, else Game Master."""
+    t = g["title"].lower()
+    dnd = "d&d" in t or "dnd" in t or "dungeon" in t
+    return "Dungeon Master" if dnd else "Game Master"
 
 
 def dnd_game_label(g):
     days = ", ".join(g["days"]) or "no days yet"
     t = datetime.strptime(g["start"], "%H:%M").strftime("%I:%M %p").lstrip("0")
-    role = "DM \U0001F4D6" if g["role"] == "dm" else "Player \u2694\ufe0f"
+    role = "GM \U0001F4D6" if g["role"] == "dm" else "Player \u2694\ufe0f"
     who = f" as {g['char']}" if g["char"] else ""
     return f"{g['title']}: {days} at {t} \u00b7 {role}{who}"
 
@@ -1533,7 +1540,7 @@ class CustomizeDialog(QDialog):
             dock = QHBoxLayout()
             dock.setSpacing(4)
             self.dock_buttons = []
-            for i, label in enumerate(("Look", "Me", "Calm", "Lists", "D&&D")):
+            for i, label in enumerate(("Look", "Me", "Calm", "Lists", "Game night")):
                 b = QPushButton(label)
                 b.setCheckable(True)
                 b.setProperty("class", "dock")
@@ -1565,7 +1572,7 @@ class CustomizeDialog(QDialog):
             tabs.addTab(personal_scroll, "Personal settings")
             tabs.addTab(med_scroll, "Meditation")
             tabs.addTab(lists_scroll, "Lists")
-            tabs.addTab(dnd_scroll, "D&&D")
+            tabs.addTab(dnd_scroll, "Game night")
             tabs.currentChanged.connect(lambda i: self.refresh_dnd() if i == 4 else None)
             self.tabs = tabs
             outer = QHBoxLayout(look)
@@ -2034,17 +2041,17 @@ class CustomizeDialog(QDialog):
         col.addWidget(self.dnd_status)
 
         # games
-        col.addWidget(self.heading("My games \U0001F409"))
+        col.addWidget(self.heading("My game nights \U0001F3B2"))
         self.dnd_list = self.list_box(4)
         self.dnd_list.setWordWrap(True)
         self.dnd_list.itemDoubleClicked.connect(lambda *_: self.dnd_edit())
         col.addWidget(self.dnd_list)
         col.addLayout(self.small_buttons([("Add", self.dnd_add), ("Change", self.dnd_edit),
                                           ("Delete", self.dnd_delete)]))
-        self.dnd_use_name = QCheckBox("During games, call me by my table name")
+        self.dnd_use_name = QCheckBox("During games, call me by my character's name")
         self.dnd_use_name.toggled.connect(lambda v: self.dnd_opt("use_name", v))
         col.addWidget(self.dnd_use_name)
-        self.dnd_dress = QCheckBox("Dress up for games (DM: book, player: sword)")
+        self.dnd_dress = QCheckBox("Dress up for games (GM: book, player: sword)")
         self.dnd_dress.toggled.connect(lambda v: self.dnd_opt("dress", v))
         col.addWidget(self.dnd_dress)
 
@@ -2055,20 +2062,28 @@ class CustomizeDialog(QDialog):
         col.addWidget(self.init_round)
         self.init_list = self.list_box(5)
         col.addWidget(self.init_list)
-        irow = QHBoxLayout()
         self.init_name = QLineEdit()
         self.init_name.setPlaceholderText("Who? (Goblin 1, Rainy...)")
         self.init_name.setMaxLength(24)
         self.init_name.returnPressed.connect(lambda: self.init_add())
-        irow.addWidget(self.init_name, 1)
+        col.addWidget(self.init_name)
+        irow = QHBoxLayout()
+        irow.addWidget(QLabel("Rolled"))
         self.init_roll = QSpinBox()
-        self.init_roll.setRange(-5, 40)
+        self.init_roll.setRange(1, 30)
         self.init_roll.setValue(10)
-        self.init_roll.setToolTip("Their initiative roll")
+        self.init_roll.setToolTip("What their d20 landed on")
         irow.addWidget(self.init_roll)
+        irow.addWidget(QLabel("Modifier"))
+        self.init_mod = ModSpin()
+        self.init_mod.setRange(-10, 20)
+        self.init_mod.setValue(0)
+        self.init_mod.setToolTip("Their initiative bonus (like +2 for Dex). Digi adds it for you.")
+        irow.addWidget(self.init_mod)
+        irow.addStretch(1)
         col.addLayout(irow)
         col.addLayout(self.small_buttons([("Add", lambda *a: self.init_add()),
-                                          ("\U0001F3B2 Roll d20", self.init_d20)]))
+                                          ("\U0001F3B2 Roll for them", self.init_d20)]))
         col.addLayout(self.small_buttons([("Next turn \u25B6", self.init_next),
                                           ("Remove", self.init_remove),
                                           ("Clear all", self.init_clear)]))
@@ -2114,7 +2129,8 @@ class CustomizeDialog(QDialog):
                    "tomorrow" if st.date() == now.date() + timedelta(days=1) else st.strftime("%A"))
             self.dnd_status.setText(f"Next game: {g['title']}, {day} at {st.strftime('%I:%M %p').lstrip('0')}")
         else:
-            self.dnd_status.setText("Add your D&D games and Digi will cheer you on at game time! \U0001F409")
+            self.dnd_status.setText("Add your game nights (D&D, Monster of the Week, Mothership...) "
+                                    "and Digi will cheer you on! \U0001F3B2")
         self.dnd_list.clear()
         for g in pet.dnd_games:
             self.dnd_list.addItem(dnd_game_label(g))
@@ -2144,9 +2160,9 @@ class CustomizeDialog(QDialog):
     def refresh_init(self):
         ini = self.pet.dnd_init
         self.init_list.clear()
-        for i, (name, roll) in enumerate(ini["order"]):
+        for i, e in enumerate(ini["order"]):
             mark = "\u25B6 " if i == ini["turn"] else "    "
-            it = QListWidgetItem(f"{mark}{roll:>2}   {name}")
+            it = QListWidgetItem(mark + init_label(e))
             if i == ini["turn"]:
                 f = it.font()
                 f.setBold(True)
@@ -2174,7 +2190,7 @@ class CustomizeDialog(QDialog):
             if not g["days"]:
                 self.pet.say("Saved! Tick its game days so I know when to cheer you on~", 3500)
             elif g["role"] == "dm":
-                self.pet.say(f"A DM! I'll bring my dragon book for {g['title']} \U0001F4D6", 3500)
+                self.pet.say(f"You're running {g['title']}! I'll bring my dragon book \U0001F4D6", 3500)
             else:
                 self.pet.say(f"I'll bring my sword for {g['title']}! \u2694\ufe0f", 3500)
             self.refresh_dnd()
@@ -2208,15 +2224,17 @@ class CustomizeDialog(QDialog):
             return
         if roll is None:
             roll = self.init_roll.value()
+        mod = self.init_mod.value()
         ini = self.pet.dnd_init
         o = ini["order"]
         cur = o[ini["turn"] % len(o)] if o else None
-        o.append([name[:24], roll])
-        o.sort(key=lambda e: -e[1])                      # highest goes first (ties: whoever was first)
+        o.append(init_entry(name, roll, mod))
+        o.sort(key=lambda e: (-e[1], -e[2]))     # highest first; a tie goes to the bigger modifier
         if cur is not None:                              # keep the turn on whoever had it
             ini["turn"] = next(i for i, e in enumerate(o) if e is cur)
         self.init_name.clear()
         self.init_roll.setValue(10)
+        self.init_mod.setValue(0)
         self.pet.save_custom()
         self.pet.dnd_views_refresh()
 
@@ -2227,8 +2245,10 @@ class CustomizeDialog(QDialog):
             self.init_name.setFocus()
             return
         r = random.randint(1, 20)
-        self.pet.say(f"{name} rolled a {r}!" + (" \u2728 Natural 20!" if r == 20 else
-                                                " Oof, a 1~" if r == 1 else ""), 2500)
+        mod = self.init_mod.value()
+        total = f" {'+' if mod >= 0 else '-'} {abs(mod)} = {r + mod}" if mod else ""
+        self.pet.say(f"{name} rolled a {r}{total}!" + (" \u2728 Natural 20!" if r == 20 else
+                                                       " Oof, a 1~" if r == 1 else ""), 3000)
         self.init_add(r)
 
     def init_next(self):
@@ -2288,7 +2308,7 @@ class CustomizeDialog(QDialog):
                 self.tabs.setCurrentIndex(i)
             return
         self.pages.setCurrentIndex(i)
-        self.phone_title.setText(("Customize Digi", "About you", "Meditation", "My lists", "D&D")[i])
+        self.phone_title.setText(("Customize Digi", "About you", "Meditation", "My lists", "Game night")[i])
         for j, b in enumerate(self.dock_buttons):
             b.setChecked(i == j)
         if i == 3:
@@ -2627,7 +2647,7 @@ class CustomizeDialog(QDialog):
         self.sleep_from.timeChanged.connect(lambda *a: self.pick_sleep())
         self.sleep_to.timeChanged.connect(lambda *a: self.pick_sleep())
 
-        lab = QLabel("\U0001F409 Game nights moved to the D&D tab!")
+        lab = QLabel("\U0001F3B2 Game nights have their own tab now!")
         lab.setStyleSheet("color: #6b5f93; font-size: 11px;")
         col.addWidget(lab)
         col.addStretch(1)
@@ -2892,6 +2912,25 @@ class ReminderEdit(QDialog):
         return (when, text, days)
 
 
+class ModSpin(QSpinBox):
+    """A spin box that shows a modifier with its sign: +2, 0, -1."""
+
+    def textFromValue(self, v):
+        return f"+{v}" if v > 0 else str(v)
+
+
+def init_entry(name, roll, mod):
+    """One line of initiative: [name, total, mod, roll]."""
+    return [name[:24], roll + mod, mod, roll]
+
+
+def init_label(e):
+    total = e[1]
+    mod, roll = (e[2], e[3]) if len(e) >= 4 else (0, e[1])
+    how = f"   ({roll} {'+' if mod >= 0 else '-'} {abs(mod)})" if mod else ""
+    return f"{total:>2}   {e[0]}{how}"
+
+
 class DndNotesWindow(QWidget):
     """A small notes window you can keep open beside your game (big, easy-to-read text),
     with whose turn it is at the bottom."""
@@ -2899,7 +2938,7 @@ class DndNotesWindow(QWidget):
     def __init__(self, pet):
         super().__init__(None)
         self.pet = pet
-        self.setWindowTitle("D&D notes")
+        self.setWindowTitle("Game night notes")
         self.setWindowFlag(Qt.Window, True)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, bool(pet.dnd_opts.get("notes_pin", True)))
         self.setStyleSheet("""
@@ -2990,7 +3029,7 @@ class DndNotesWindow(QWidget):
         if who:
             self.turn.setText(f"\u2694\ufe0f Round {self.pet.dnd_init['round']} \u00b7 {who}'s turn")
         else:
-            self.turn.setText("No initiative yet (add it in Customize \u2192 D&D)")
+            self.turn.setText("No initiative yet (add it in Customize \u2192 Game night)")
         self.next_btn.setEnabled(bool(who))
 
     def next_turn(self):
@@ -3034,11 +3073,11 @@ class DndNotesWindow(QWidget):
 
 
 class DndGameEdit(QDialog):
-    """Add or change one D&D game: its name, days, time, and whether you're the DM or a player."""
+    """Add or change one game night: its name, days, time, and whether you're the GM or a player."""
 
     def __init__(self, parent, game=None):
         super().__init__(parent)
-        self.setWindowTitle("D&D game")
+        self.setWindowTitle("Game night")
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         game = game or {"title": "", "role": "player", "char": "", "days": [], "start": "19:00",
                         "hours": 4, "notes": ""}
@@ -3046,12 +3085,12 @@ class DndGameEdit(QDialog):
         lay = QVBoxLayout(self)
         lay.addWidget(QLabel("Name of the game"))
         self.title = QLineEdit(game["title"])
-        self.title.setPlaceholderText("Curse of Strahd, Friday group...")
+        self.title.setPlaceholderText("Curse of Strahd, Monster of the Week, Mothership...")
         self.title.setMaxLength(40)
         lay.addWidget(self.title)
         lay.addWidget(QLabel("You are the..."))
         rrow = QHBoxLayout()
-        self.dm = QRadioButton("DM \U0001F4D6 (Digi brings her dragon book)")
+        self.dm = QRadioButton("GM / DM / Keeper \U0001F4D6 (Digi brings her dragon book)")
         self.player = QRadioButton("Player \u2694\ufe0f (Digi brings her sword)")
         (self.dm if game["role"] == "dm" else self.player).setChecked(True)
         rl = QVBoxLayout()
@@ -3102,13 +3141,13 @@ class DndGameEdit(QDialog):
     def role_changed(self, *a):
         if self.dm.isChecked():
             self.char_label.setText("What should Digi call you at the table? (optional)")
-            self.char.setPlaceholderText("Leave empty and she'll call you Dungeon Master")
+            self.char.setPlaceholderText("Leave empty: Dungeon Master for D&D, Game Master for others")
         else:
             self.char_label.setText("Your character's name (Digi calls you this during the game)")
             self.char.setPlaceholderText("Rainy, Thorin, Lady Moonwhisper...")
 
     def result_item(self):
-        return clean_dnd_game({"title": self.title.text().strip() or "D&D",
+        return clean_dnd_game({"title": self.title.text().strip() or "Game night",
                                "role": "dm" if self.dm.isChecked() else "player",
                                "char": self.char.text().strip(),
                                "days": [d for d, c in self.days.items() if c.isChecked()],
@@ -4792,7 +4831,7 @@ class Pet(QWidget):
         dm.addSeparator()
         dm.addAction("Advantage (2d20)", lambda *a: self.roll_dice(20, 2))
         dm.addAction("Custom roll... (like 5d20+3)", self.custom_roll)
-        ddm = pm.addMenu("\U0001F409 D&D")
+        ddm = pm.addMenu("\U0001F3B2 Game night")
         if self.dnd_init["order"]:
             ddm.addAction(f"Next turn (now: {self.dnd_turn_name()})", self.dnd_next_turn)
         ddm.addAction("\U0001F4DC Session notes (pop out)", lambda *a: self.open_dnd_notes())
@@ -6847,8 +6886,15 @@ class Pet(QWidget):
                 self.dnd_opts["notes_geo"] = [int(v) for v in geo]
         ini = d.get("dnd_init")
         if isinstance(ini, dict) and isinstance(ini.get("order"), list):
-            order = [[str(e[0])[:24], int(e[1])] for e in ini["order"]
-                     if isinstance(e, (list, tuple)) and len(e) == 2 and isinstance(e[1], (int, float))]
+            order = []
+            for e in ini["order"]:
+                if not (isinstance(e, (list, tuple)) and len(e) in (2, 4)
+                        and all(isinstance(v, (int, float)) for v in e[1:])):
+                    continue
+                if len(e) == 2:                    # saved before modifiers: the roll was the total
+                    order.append([str(e[0])[:24], int(e[1]), 0, int(e[1])])
+                else:
+                    order.append([str(e[0])[:24], int(e[1]), int(e[2]), int(e[3])])
             self.dnd_init = {"order": order[:30],
                              "turn": int(ini.get("turn", 0)) if order else 0,
                              "round": max(1, int(ini.get("round", 1)))}
@@ -7665,14 +7711,13 @@ class Pet(QWidget):
             lines += ["It's my birthday~ \U0001F382", "Party time! \U0001F389"]
         elif n <= 21:
             lines.append(f"{n} days until my birthday! \U0001F382" if n > 1 else "My birthday is tomorrow!!")
-        dnd_numbers = [DAY_NUMBERS[d] for d in self.dnd_days]
-        for offset in range(1, 8):
-            if (today.weekday() + offset) % 7 in dnd_numbers:
-                if offset == 1:
-                    lines.append("D&D is tomorrow!")
-                elif offset <= 4:
-                    lines.append(f"{offset} days until D&D!")
-                break
+        nxt = dnd_next_game(self.dnd_games, datetime.now()) if self.dnd_games else None
+        if nxt:
+            offset = (nxt[1].date() - today).days
+            if offset == 1:
+                lines.append(f"{nxt[0]['title']} is tomorrow!")
+            elif 1 < offset <= 4:
+                lines.append(f"{offset} days until {nxt[0]['title']}!")
         if self.todos:
             n = len(self.todos)
             lines.append("1 task left on your list!" if n == 1
@@ -7765,7 +7810,7 @@ class Pet(QWidget):
             if g["char"]:
                 return g["char"]
             if g["role"] == "dm":
-                return "Dungeon Master"
+                return gm_title(g)
         return getattr(self, "nickname", "")
 
     def check_dnd(self):
@@ -7778,10 +7823,10 @@ class Pet(QWidget):
             key = (st, g["title"], "start")
             if key not in self.dnd_said and now - st < timedelta(minutes=15):
                 self.dnd_said.add(key)
-                name = self.call_name() or ("Dungeon Master" if g["role"] == "dm" else "adventurer")
+                name = self.call_name() or (gm_title(g) if g["role"] == "dm" else "adventurer")
                 lines = DND_DM_LINES if g["role"] == "dm" else DND_START_LINES
                 if not self.reminder_active:
-                    self.say(random.choice(lines).format(name=name), 5000)
+                    self.say(random.choice(lines).format(name=name, title=g["title"]), 5000)
                     self.happy = 40
                     self.jump = 20
             self.dnd_last = (g, st, end)
@@ -7828,12 +7873,12 @@ class Pet(QWidget):
         if not games:
             self.say("No notes to save yet~", 2500)
             return
-        base = "D&D notes" if index is None else (re.sub(r'[\\/:*?"<>|]', "", games[0]["title"]).strip()
-                                                 or "D&D") + " notes"
+        base = "Game night notes" if index is None else (re.sub(r'[\\/:*?"<>|]', "", games[0]["title"]).strip()
+                                                        or "Game night") + " notes"
         folder = os.path.expanduser("~/Documents")
         if not os.path.isdir(folder):
             folder = os.path.expanduser("~")
-        path, _ = QFileDialog.getSaveFileName(parent, "Save your D&D notes",
+        path, _ = QFileDialog.getSaveFileName(parent, "Save your game night notes",
                                               os.path.join(folder, base + ".txt"),
                                               "Text file (*.txt);;Markdown (*.md)")
         if not path:
@@ -7888,7 +7933,7 @@ class Pet(QWidget):
     def dnd_next_turn(self):
         o = self.dnd_init["order"]
         if not o:
-            self.say("Nobody's in initiative yet! Add them in Customize \u2192 D&D~", 3000)
+            self.say("Nobody's in initiative yet! Add them in Customize \u2192 Game night~", 3000)
             return
         self.dnd_init["turn"] += 1
         if self.dnd_init["turn"] >= len(o):
