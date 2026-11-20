@@ -1377,7 +1377,7 @@ def flat_mesh(name, pts, thick, bevel=0.4):
     return o
 
 
-def soft_box(size, bevel=0.012):
+def item_box(size, bevel=0.012):
     bpy.ops.mesh.primitive_cube_add(size=1)
     o = made()
     o.scale = size
@@ -1388,7 +1388,7 @@ def soft_box(size, bevel=0.012):
     return o
 
 
-def ball(r):
+def item_ball(r):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=r)
     return made()
 
@@ -1405,27 +1405,47 @@ BOOK = local_empty("BookFrame", ARM[-1], (-HAND_AT.x, 0.03, HAND_AT.z), (0, math
 BW, BH, BT = 0.34, 0.42, 0.085          # width, height, thickness
 BZ = 0.2                                # book middle, above her mitten
 OUTFITS["book"] = []
-OUTFITS["book"].append(hat_part(soft_box((BW - 0.02, BT - 0.02, BH - 0.025), 0.004), book_pages, BOOK,
+OUTFITS["book"].append(hat_part(item_box((BW - 0.02, BT - 0.02, BH - 0.025), 0.004), book_pages, BOOK,
                                 (0.01, 0, BZ)))                                       # the pages
 for sy in (-1, 1):
-    OUTFITS["book"].append(hat_part(soft_box((BW, 0.014, BH)), book_cover, BOOK,
+    OUTFITS["book"].append(hat_part(item_box((BW, 0.014, BH)), book_cover, BOOK,
                                     (0, sy * (BT / 2 - 0.007), BZ)))                  # front and back cover
-OUTFITS["book"].append(hat_part(soft_box((0.02, BT, BH)), book_spine, BOOK,
+OUTFITS["book"].append(hat_part(item_box((0.02, BT, BH)), book_spine, BOOK,
                                 (-BW / 2 + 0.006, 0, BZ)))                            # the spine (outer side)
-# gold border on the front cover
-FY = -BT / 2 - 0.004                    # just in front of the cover
-for (w, h, dx, dz) in ((BW - 0.05, 0.012, 0, BH / 2 - 0.03), (BW - 0.05, 0.012, 0, -BH / 2 + 0.03),
-                       (0.012, BH - 0.05, BW / 2 - 0.03, 0), (0.012, BH - 0.05, -BW / 2 + 0.03, 0)):
-    OUTFITS["book"].append(hat_part(soft_box((w, 0.008, h), 0.003), gold_trim, BOOK, (dx, FY, BZ + dz)))
-# the dragon, from the side: snout, horn, a big spiky wing, legs and a curling tail (facing her)
-dragon = [(90, 70), (85, 76), (76, 79), (71, 82), (61, 91), (66, 80), (64, 74), (58, 66), (54, 59),
-          (51, 58), (50, 72), (52, 88), (55, 100), (44, 85), (30, 93), (30, 76), (14, 80), (22, 64),
-          (35, 55), (33, 48), (22, 45), (12, 40), (5, 31), (7, 21), (15, 16), (25, 18), (19, 22),
-          (14, 28), (18, 35), (29, 38), (31, 32), (28, 24), (37, 22), (39, 30), (50, 32), (55, 27),
-          (64, 25), (62, 32), (63, 41), (67, 52), (73, 60), (80, 64), (86, 66)]
-o = flat_mesh("BookDragon", [((x - 47.5) * 0.0028, (y - 58) * 0.0028) for x, y in dragon], 0.008,
-              bevel=0.3)
-OUTFITS["book"].append(hat_part(o, gold_trim, BOOK, (0, -BT / 2 + 0.0005, BZ + 0.035)))
+# the front cover art. Nancy's own drawing goes in the studio folder as "book_cover.png"
+# (any size, shaped like the cover: 34 wide by 42 tall, e.g. 1020 x 1260). Until it's there,
+# a placeholder: a gold border and a gold dragon.
+BOOK_ART = os.path.join(HERE, "book_cover.png")
+if os.path.exists(BOOK_ART):
+    art = bpy.data.materials.new("of_bookart")
+    art.use_nodes = True
+    nt = art.node_tree
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(BOOK_ART, check_existing=True)
+    tex.interpolation = "Cubic"
+    bsdf = nt.nodes.get("Principled BSDF")
+    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value = 0.6
+    bpy.ops.mesh.primitive_plane_add(size=1)
+    o = made()
+    o.scale = (BW - 0.004, BH - 0.004, 1)
+    OUTFITS["book"].append(hat_part(o, art, BOOK, (0, -BT / 2 - 0.0015, BZ), (math.radians(90), 0, 0)))
+    print("book cover: using", BOOK_ART)
+else:
+    # gold border on the front cover
+    FY = -BT / 2 - 0.004                    # just in front of the cover
+    for (w, h, dx, dz) in ((BW - 0.05, 0.012, 0, BH / 2 - 0.03), (BW - 0.05, 0.012, 0, -BH / 2 + 0.03),
+                           (0.012, BH - 0.05, BW / 2 - 0.03, 0), (0.012, BH - 0.05, -BW / 2 + 0.03, 0)):
+        OUTFITS["book"].append(hat_part(item_box((w, 0.008, h), 0.003), gold_trim, BOOK, (dx, FY, BZ + dz)))
+    # the dragon, from the side: snout, horn, a big spiky wing, legs and a curling tail (facing her)
+    dragon = [(90, 70), (85, 76), (76, 79), (71, 82), (61, 91), (66, 80), (64, 74), (58, 66), (54, 59),
+              (51, 58), (50, 72), (52, 88), (55, 100), (44, 85), (30, 93), (30, 76), (14, 80), (22, 64),
+              (35, 55), (33, 48), (22, 45), (12, 40), (5, 31), (7, 21), (15, 16), (25, 18), (19, 22),
+              (14, 28), (18, 35), (29, 38), (31, 32), (28, 24), (37, 22), (39, 30), (50, 32), (55, 27),
+              (64, 25), (62, 32), (63, 41), (67, 52), (73, 60), (80, 64), (86, 66)]
+    o = flat_mesh("BookDragon", [((x - 47.5) * 0.0028, (y - 58) * 0.0028) for x, y in dragon], 0.008,
+                  bevel=0.3)
+    OUTFITS["book"].append(hat_part(o, gold_trim, BOOK, (0, -BT / 2 + 0.0005, BZ + 0.035)))
 # ribbon bookmark hanging out of the bottom, on the side toward her
 rib = [(-0.016, 0.0), (0.016, 0.0), (0.016, -0.12), (0.0, -0.1), (-0.016, -0.12)]
 OUTFITS["book"].append(hat_part(flat_mesh("BookRibbon", rib, 0.006, bevel=0.2), book_ribbon, BOOK,
@@ -1441,12 +1461,12 @@ SWORD = local_empty("SwordFrame", ARM[1], (HAND_AT.x, -0.02, HAND_AT.z), (0, mat
 OUTFITS["sword"] = []
 bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.026, depth=0.15)
 OUTFITS["sword"].append(hat_part(made(), grip_m, SWORD, (0, 0, 0)))                    # the grip
-OUTFITS["sword"].append(hat_part(ball(0.04), gold_trim, SWORD, (0, 0, -0.095)))        # pommel
-OUTFITS["sword"].append(hat_part(soft_box((0.25, 0.05, 0.045), 0.015), gold_trim, SWORD,
+OUTFITS["sword"].append(hat_part(item_ball(0.04), gold_trim, SWORD, (0, 0, -0.095)))        # pommel
+OUTFITS["sword"].append(hat_part(item_box((0.25, 0.05, 0.045), 0.015), gold_trim, SWORD,
                                  (0, 0, 0.095)))                                       # crossguard
 for sx in (-1, 1):
-    OUTFITS["sword"].append(hat_part(ball(0.03), gold_trim, SWORD, (0.125 * sx, 0, 0.095)))
-OUTFITS["sword"].append(hat_part(ball(0.022), gem_m, SWORD, (0, -0.03, 0.095)))      # the gem
+    OUTFITS["sword"].append(hat_part(item_ball(0.03), gold_trim, SWORD, (0.125 * sx, 0, 0.095)))
+OUTFITS["sword"].append(hat_part(item_ball(0.022), gem_m, SWORD, (0, -0.03, 0.095)))      # the gem
 blade = [(-0.042, 0.0), (0.042, 0.0), (0.042, 0.42), (0.0, 0.52), (-0.042, 0.42)]
 OUTFITS["sword"].append(hat_part(flat_mesh("SwordBlade", blade, 0.022, bevel=0.45), blade_m, SWORD,
                                  (0, 0.011, 0.115)))
