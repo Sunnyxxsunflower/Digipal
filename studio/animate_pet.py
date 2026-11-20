@@ -1170,25 +1170,105 @@ for sx in (-1, 1):
 OUTFITS["glasses"].append(rod((-0.13, -0.58, HEAD_C.z + EYE_Z + 0.03),
                                 (0.13, -0.58, HEAD_C.z + EYE_Z + 0.03), 0.014, gold, HEAD))
 
-# big hair bow on the top-left of her head
-bow_pink = outfit_mat("of_bow", "#f27fa8", 0.55)
-BOW = empty("BowFrame", tuple(HEAD_C + Vector((0, -0.28, 0.96)).normalized() * 0.62), HEAD)
-BOW.rotation_euler = Vector((0, -0.75, 0.66)).normalized().to_track_quat("Z", "Y").to_euler()   # faces you
+# big satin hair bow on top of her head, like Nancy's reference: two layers of loops (big ones
+# behind, smaller ones in front), a wrapped knot, long ribbon tails hanging down past her ears
+# with notched ends, and a tiny gold charm dangling on one side
+bow_pink = outfit_mat("of_bow", "#e99aa6", 0.35)       # soft dusty-rose satin
+# standing up on the top-front of her head, facing you (tipped back a little), the bottom of the
+# loops tucked into her hair
+BOW = empty("BowFrame", tuple(HEAD_C + Vector((0, -0.25, 0.97)).normalized() * 0.68), HEAD)
+BOW.rotation_euler = Vector((0, -1, 0.35)).normalized().to_track_quat("Z", "Y").to_euler()
+BOW.rotation_euler.rotate_axis("Z", math.radians(-6))      # worn a little tilted
+
+
+def bow_loop(name, length, height, depth):
+    """One puffy satin loop: pinched at the knot (x=0), round and full out at x=length,
+    with a soft fold down the middle of its front."""
+    import bmesh
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=48, v_segments=24, radius=1.0)
+    for v in bm.verts:
+        x, y, z = v.co
+        u = (x + 1) / 2                                  # 0 at the knot, 1 at the outer end
+        h = (u ** 0.45) * ((1 - u) ** 0.25) / 0.634       # pinched, then full, then rounded
+        rr = math.hypot(y, z)
+        dy, dz = (y / rr, z / rr) if rr > 1e-6 else (0.0, 0.0)
+        yy, zz = dy * h * height, dz * h * depth
+        if zz > 0:                                       # the fold in the satin
+            zz -= 0.3 * depth * h * math.exp(-(yy / (0.18 * height + 1e-6)) ** 2)
+        v.co = (u * length, yy, zz)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    return o
+
+
 for sx in (-1, 1):
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
-    o = made()
-    o.scale = (0.27, 0.17, 0.08)
-    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.23 * sx, 0, 0.09),
-                                   (0, math.radians(-14 * sx), math.radians(10 * sx))))
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=1)
-    o = made()
-    o.scale = (0.08, 0.2, 0.04)
-    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.12 * sx, -0.2, 0.05),
-                                   (0, 0, math.radians(22 * sx))))
-bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=0.09)
+    # big loops behind, tips lifted a little
+    o = bow_loop("BowBack%d" % sx, 0.42, 0.27, 0.09)
+    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.03 * sx, 0.02, -0.02),
+                                   (0, 0, math.radians(90 - sx * 90 + sx * 14))))
+    # smaller loops in front, tips dipping a little
+    o = bow_loop("BowFront%d" % sx, 0.3, 0.19, 0.08)
+    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.03 * sx, -0.03, 0.05),
+                                   (0, 0, math.radians(90 - sx * 90 - sx * 12))))
+bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
 o = made()
-o.scale = (1, 1, 0.75)
-OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0, 0, 0.12)))
+o.scale = (0.075, 0.09, 0.07)
+OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0, -0.01, 0.08)))           # the wrapped knot
+
+# long ribbon tails: from behind the knot, down past her ears, flat side toward you, notched ends
+BOWTAILS = empty("BowTailFrame", tuple(HEAD_C), HEAD)
+
+
+def ribbon_tail(name, sx, width=0.11, steps=24):
+    import bmesh
+    bm = bmesh.new()
+    pts = []
+    for k in range(steps + 1):
+        t = k / steps
+        pts.append(Vector((sx * (0.3 + 0.42 * math.sin(t * math.pi * 0.5)) + 0.03 * math.sin(t * 7),
+                           -0.12 - 0.1 * t, 0.62 - 0.78 * t)))     # starts hidden behind the loops
+    rows = []
+    for k, p in enumerate(pts):
+        tan = (pts[min(k + 1, steps)] - pts[max(k - 1, 0)]).normalized()
+        side = tan.cross(Vector((0, 1, 0))).normalized()
+        w = width * (0.75 + 0.25 * k / steps)          # widens a touch toward the end
+        if k == steps:
+            notch = bm.verts.new(p - tan * width * 0.55)  # the V cut at the end
+        rows.append((bm.verts.new(p - side * w / 2), bm.verts.new(p + side * w / 2)))
+    for k in range(steps - 1):
+        (a, b), (c, d) = rows[k], rows[k + 1]
+        bm.faces.new((a, b, d, c))
+    (a, b), (c, d) = rows[steps - 1], rows[steps]
+    bm.faces.new((a, b, notch))
+    bm.faces.new((a, notch, c))
+    bm.faces.new((b, d, notch))
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    sol = o.modifiers.new("Thick", "SOLIDIFY")
+    sol.thickness = 0.014
+    sol.offset = 0
+    sub = o.modifiers.new("Soft", "SUBSURF")
+    sub.levels = sub.render_levels = 1
+    return o
+
+
+for sx in (-1, 1):
+    OUTFITS["bow"].append(hat_part(ribbon_tail("BowTail%d" % sx, sx), bow_pink, BOWTAILS, (0, 0, 0)))
+
+# the little gold charm, hanging from the right of the knot on a tiny chain
+bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.005, depth=0.09)
+OUTFITS["bow"].append(hat_part(made(), gold, BOW, (0.12, -0.13, 0.07), (math.radians(90), 0, 0)))
+bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.028)
+o = made()
+o.scale = (1, 1, 1.25)
+OUTFITS["bow"].append(hat_part(o, gold, BOW, (0.12, -0.19, 0.07)))
 
 
 # star clip on the right side, above her ear
