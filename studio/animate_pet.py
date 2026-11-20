@@ -2776,10 +2776,11 @@ def render_states():
         for s in (-1, 1):
             LEG[s].rotation_euler = (math.radians(-(84 + 5 * w * s)), math.radians(-s * 8), 0)
         show2("gamepad")
-        PAD.location = (0, -0.5, 1.02 + 0.012 * w2)
-        PAD.rotation_euler = (math.radians(53 + 4 * w2), 0, math.radians(5 * w))
-        for s in (-1, 1):
-            aim_arm(s, (0.14 * s, -0.55, 0.97 + 0.012 * w2 + 0.01 * w * s))
+        PAD.scale = (1.6, 1.6, 1.6)                 # big enough to see between her hands
+        PAD.location = (0, -0.6, 1.0 + 0.012 * w2)
+        PAD.rotation_euler = (math.radians(65 + 4 * w2), 0, math.radians(5 * w))
+        for s in (-1, 1):                           # her hands on the grips, at the ends
+            aim_arm(s, (0.215 * s, -0.64, 0.88 + 0.012 * w2 + 0.01 * w * s))
         tilt(HEAD, 3 * w)
         tails(2 * w, -2 * w)
         shoot("gaming", i)
