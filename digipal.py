@@ -208,7 +208,7 @@ INTRO_STEPS = [
 ]
 
 # the modes row (right-click > Modes): one round button each
-MODE_BUTTONS = [("\U0001F3AE\nGames", "gaming"), ("\U0001F37F\nMovie", "movie"),
+MODE_BUTTONS = [("\U0001F3AE\nGames", "gaming"), ("\U0001F409\nD&&D", "dnd"), ("\U0001F37F\nMovie", "movie"),
                 ("\U0001F3A5\nStream", "stream"), ("\U0001F4E3\nCheer", "cheer"),
                 ("\U0001F319\nNone", "off"), ("\u2715", "close")]
 GAMING_START = ["Game time! \U0001F3AE I'll play over here~", "Ooh, let's play together! \U0001F3AE",
@@ -216,6 +216,15 @@ GAMING_START = ["Game time! \U0001F3AE I'll play over here~", "Ooh, let's play t
 GAMING_END = ["GG! That was fun! \U0001F3AE", "I almost beat that level!", "Good game~ \u2665"]
 GAMING_LINES = ["Ooh, I found a secret!", "Level up! \u2728", "Nooo, I fell in the lava!",
                 "Boss fight! \U0001F4AA", "One more round!", "I got a new high score!"]
+
+DND_MODE_START = ["Adventure time! I'll play D&D over here~ \U0001F409",
+                  "Solo campaign, here I come! \U0001F4D6", "I'll be in my corner, rolling dice~ \U0001F3B2"]
+DND_MODE_END = ["Campaign saved! That was fun~ \U0001F409", "The dragon lives to fight another day!",
+                "Good session! \u2665"]
+DND_MODE_LINES = ["I open the treasure chest... \U0001F440", "The goblins are sneaking up! Roll to dodge~",
+                  "I sneak past the sleeping dragon... shhh~", "I check the door for traps!",
+                  "The innkeeper looks suspicious...", "I search the dusty library!",
+                  "Time for a short rest~", "A wild owlbear appears!"]
 
 STEAM_CHEERS = ["Yay!", "This is so fun!", "Have fun!", "Ooh, good game!"]
 
@@ -267,7 +276,7 @@ ACC_MENU = [("auto", "Seasonal (changes by month)"), ("santa", "Santa hat"),
 # things she holds in her hand instead of wearing on her head: hidden while her hands are busy
 HAND_ACCS = ("book", "sword")
 HAND_BUSY = ("typing", "camera", "gaming", "cuddle_", "meditate", "stretch", "shy", "shiver",
-             "umbrella", "peek", "sleep_")
+             "scared", "umbrella", "peek", "sleep_")
 
 SPEED = 2.0
 PAUSE_CHANCE = 0.004
@@ -3915,6 +3924,8 @@ class Pet(QWidget):
         self.stream_manual = False
         self.movie = False              # movie mode: popcorn in the corner
         self.gaming = False             # video game mode: she plays games in the corner too
+        self.dnd_mode = False           # D&D mode: she plays solo D&D in the corner with her dragon book
+        self.dnd_mode_next = 0
         self.gaming_cheer = 0
         self.obs_open = False
         self.streaming = False
@@ -4348,6 +4359,8 @@ class Pet(QWidget):
             want = [("sitfloor", 5)]
         elif self.gaming and self.corner_settled():
             want = [("gaming", 4), ("sitfloor", 5)]
+        elif self.dnd_mode and self.corner_settled():
+            want = [("sitfloor", 5)]                # sitting with her dragon book, rolling dice
         elif self.floor_sit and not self.dragging:
             want = [("sitfloor", 5)]
         elif self.sitting and self.mode == "perch" and not self.dragging:
@@ -4722,7 +4735,8 @@ class Pet(QWidget):
         menu.addSeparator()
         menu.addAction("Say hi", self.poke)
         menu.addAction("Come here!", self.come_here)
-        names = {"gaming": "Video games", "movie": "Movie", "stream": "Stream", "cheer": "Cheer me on"}
+        names = {"gaming": "Video games", "dnd": "Solo D&D", "movie": "Movie", "stream": "Stream",
+                 "cheer": "Cheer me on"}
         now_mode = self.current_mode()
         menu.addAction("\U0001F3AE Modes..." + ("  (now: %s)" % names[now_mode] if now_mode in names else ""),
                        self.show_modes)
@@ -4816,7 +4830,7 @@ class Pet(QWidget):
 
         fm = sm.addMenu("Fun stuff she does on her own")
         for key, label in [("bubbles", "Blowing bubbles"), ("crystal", "Crystal ball"),
-                           ("teleport", "Teleporting"), ("dnd_solo", "D&D solo play (during game time)"),
+                           ("teleport", "Teleporting"),
                            ("cursor", "Playing with the cursor"), ("flowers", "Picking flowers"),
                            ("cuddle", "Night cuddles"), ("typing", "Typing along with you"),
                            ("camera", "Camera when you take a screenshot"),
@@ -4881,7 +4895,6 @@ class Pet(QWidget):
                           ("Blow bubbles", lambda *a: self.start_activity("bubbles")),
                           ("Crystal ball", lambda *a: self.start_activity("crystal")),
                           ("Teleport", self.start_teleport),
-                          ("D&D solo play", lambda *a: self.start_activity("dnd")),
                           ("Play with the cursor", lambda *a: self.start_activity("cursor")),
                           ("Pick flowers", lambda *a: self.start_activity("flowers")),
                           ("Night cuddles", lambda *a: self.start_activity("cuddle")),
@@ -5145,13 +5158,15 @@ class Pet(QWidget):
     def update_stream(self):
         was = self.streaming
         self.obs_open = self.check_obs()
-        self.streaming = (self.stream_manual or self.movie or self.gaming
+        self.streaming = (self.stream_manual or self.movie or self.gaming or self.dnd_mode
                           or (self.stream_enabled and self.obs_open))
         if self.streaming and not was:
             if self.movie:
                 self.say("Movie time! \U0001F37F I'll be quiet~", 3000)
             elif self.gaming:
                 self.say(random.choice(GAMING_START), 3000)
+            elif self.dnd_mode:
+                self.say(random.choice(DND_MODE_START), 3000)
             else:
                 self.say("Ooh, are we live? I'll sit quietly over here~", 3000)
             self.end_ball()
@@ -5190,10 +5205,37 @@ class Pet(QWidget):
         self.gaming_cheer = time.time() + random.uniform(120, 300)
         self.update_stream()
 
+    def set_dnd_mode(self, value):
+        was = self.dnd_mode
+        self.dnd_mode = value
+        if was and not value:
+            self.streaming = False
+            self.update_stream()
+            if not self.streaming:
+                self.say(random.choice(DND_MODE_END), 2500)
+                self.happy = 30
+            return
+        self.dnd_mode_next = time.time() + random.uniform(10, 16)    # first roll soon after she sits
+        if self.streaming and not was:          # switched over from another mode: say hi to D&D anyway
+            self.say(random.choice(DND_MODE_START), 3000)
+        self.update_stream()
+
+    def check_dnd_mode(self):
+        """D&D mode: every minute or so she narrates a bit of her adventure and rolls a d20."""
+        if not (self.dnd_mode and self.corner_settled()) or time.time() < self.dnd_mode_next:
+            return
+        if self.msg or self.reminder_active or self.dice:
+            return
+        self.say(random.choice(SPELLS + DND_MODE_LINES), 2600)
+        QTimer.singleShot(1800, lambda: self.roll_dice(20) if self.dnd_mode else None)
+        self.dnd_mode_next = time.time() + random.uniform(45, 90)
+
     # ----- modes: one row of round buttons to pick how she hangs out -----
     def current_mode(self):
         if self.gaming:
             return "gaming"
+        if self.dnd_mode:
+            return "dnd"
         if self.movie:
             return "movie"
         if self.stream_manual:
@@ -5211,6 +5253,8 @@ class Pet(QWidget):
         # only one mode at a time: switch the others off first (quietly)
         if self.gaming and key != "gaming":
             self.gaming = False
+        if self.dnd_mode and key != "dnd":
+            self.dnd_mode = False
         if self.movie and key != "movie":
             self.movie = False
         if self.stream_manual and key != "stream":
@@ -5219,6 +5263,8 @@ class Pet(QWidget):
             self.set_game_mode(False)
         if key == "gaming":
             self.set_gaming(True)
+        elif key == "dnd":
+            self.set_dnd_mode(True)
         elif key == "movie":
             self.set_movie(True)
         elif key == "stream":
@@ -5233,8 +5279,8 @@ class Pet(QWidget):
                 self.say("Back to hanging out~", 2200)
 
     def corner_settled(self):
-        """She's made it to her corner spot (movie or video game mode)."""
-        if not (self.movie or self.gaming) or self.dragging:
+        """She's made it to her corner spot (movie, video game or D&D mode)."""
+        if not (self.movie or self.gaming or self.dnd_mode) or self.dragging:
             return False
         tx = self.area.right() - 200
         ty = self.area.bottom() - 230
@@ -5646,9 +5692,6 @@ class Pet(QWidget):
                 choices.append(key)
         if self.fun["teleport"]:
             choices.append("teleport")
-        if self.fun["dnd_solo"] and (self.dnd_now() if self.dnd_games
-                                     else (now.strftime("%a") in self.dnd_days and h >= 19)):
-            choices += ["dnd"] * 5                   # D&D night: mostly this!
         if self.fun["cuddle"] and (h >= 21 or h < 0.5):
             choices += ["cuddle"] * 3
         w = self.weather_kind()
@@ -6917,6 +6960,8 @@ class Pet(QWidget):
         return frames
 
     def current_accessory(self):
+        if getattr(self, "dnd_mode", False):
+            return "book"                                            # her solo campaign
         s = self.dnd_now() if self.dnd_games else None
         if s and self.dnd_opts.get("dress", True):
             return "book" if s[0]["role"] == "dm" else "sword"      # game time!
@@ -8423,6 +8468,7 @@ class Pet(QWidget):
             self.check_welcome()
             self.check_greeting()
             self.check_reminders()
+            self.check_dnd_mode()
             self.check_timers()
             self.check_focus()
             self.check_meditation()

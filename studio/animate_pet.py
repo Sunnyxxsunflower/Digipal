@@ -1347,7 +1347,7 @@ OUTFITS["star"].append(hat_part(star_mesh("StarClip", 0.2, 0.085, 0.06), yolk, S
 # busy (typing, hugging, the camera...) aren't rendered with them: the app shows her without.
 HAND_ITEMS = ("book", "sword")
 HAND_BUSY = ("typing", "camera", "gaming", "cuddle_", "meditate", "stretch", "shy", "shiver",
-             "umbrella", "peek", "sleep_")
+             "scared", "umbrella", "peek", "sleep_")
 HAND_AT = Vector((0.32, 0, -0.44))      # her mitten, relative to the shoulder pivot (ARM_REST)
 
 
@@ -1457,7 +1457,8 @@ blade_m = outfit_mat("of_blade", "#e3e9f2", 0.25)
 fuller_m = outfit_mat("of_fuller", "#b7c6e4", 0.3)
 grip_m = outfit_mat("of_grip", "#6b5fb5", 0.6)
 gem_m = outfit_mat("of_gem", "#ff7eb6", 0.2)
-SWORD = local_empty("SwordFrame", ARM[1], (HAND_AT.x, -0.02, HAND_AT.z), (0, math.radians(28), 0))
+SWORD = local_empty("SwordFrame", ARM[1], (HAND_AT.x, -0.02, HAND_AT.z), (0, math.radians(36), 0))
+SWORD.scale = (1.4, 1.4, 1.4)           # big enough to read at her real size on screen
 OUTFITS["sword"] = []
 bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.026, depth=0.15)
 OUTFITS["sword"].append(hat_part(made(), grip_m, SWORD, (0, 0, 0)))                    # the grip
@@ -1467,10 +1468,10 @@ OUTFITS["sword"].append(hat_part(item_box((0.25, 0.05, 0.045), 0.015), gold_trim
 for sx in (-1, 1):
     OUTFITS["sword"].append(hat_part(item_ball(0.03), gold_trim, SWORD, (0.125 * sx, 0, 0.095)))
 OUTFITS["sword"].append(hat_part(item_ball(0.022), gem_m, SWORD, (0, -0.03, 0.095)))      # the gem
-blade = [(-0.042, 0.0), (0.042, 0.0), (0.042, 0.42), (0.0, 0.52), (-0.042, 0.42)]
+blade = [(-0.05, 0.0), (0.05, 0.0), (0.05, 0.42), (0.0, 0.53), (-0.05, 0.42)]
 OUTFITS["sword"].append(hat_part(flat_mesh("SwordBlade", blade, 0.022, bevel=0.45), blade_m, SWORD,
                                  (0, 0.011, 0.115)))
-fuller = [(-0.009, 0.0), (0.009, 0.0), (0.009, 0.36), (0.0, 0.39), (-0.009, 0.36)]
+fuller = [(-0.011, 0.0), (0.011, 0.0), (0.011, 0.36), (0.0, 0.39), (-0.011, 0.36)]
 OUTFITS["sword"].append(hat_part(flat_mesh("SwordFuller", fuller, 0.004, bevel=0), fuller_m, SWORD,
                                  (0, -0.012, 0.15)))
 
@@ -2507,7 +2508,7 @@ def shoot(state, i):
             return                      # her hands are busy: the app shows her without it
         if ONLY and state not in ONLY:
             return
-        look = (("idle", "walk", "happy", "sitfloor", "sit", "scared", "held", "sing")
+        look = (("idle", "walk", "happy", "sitfloor", "sit", "held", "sing")
                 if CURRENT_OUTFIT in HAND_ITEMS else ("idle", "peekside", "peektop"))
         if PREVIEW and not (i == 0 and state in look):
             return
