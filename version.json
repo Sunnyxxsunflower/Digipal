@@ -1,5 +1,5 @@
 {
-  "version": 36,
+  "version": 37,
   "frames_version": 1,
   "frames_mb": 800,
   "frames_url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-1/pet_frames.zip",
@@ -49,6 +49,12 @@
       "url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-4/new_hats_pack.zip",
       "mb": 582,
       "what": "new hats: beret, sun hat, glasses, star clip"
+    },
+    {
+      "version": 5,
+      "url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-5/bunny_bow_gaming_pack.zip",
+      "mb": 353,
+      "what": "bunny ears, big bow, video game mode"
     }
   ]
 }
