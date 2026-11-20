@@ -580,14 +580,18 @@ SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 #   crown_r: how roomy the inside is, dy/dz: moved back/up on her head, tilt: tipped back (degrees),
 #   tuck: tuck away any hair poking out past the hat, back: how much shorter the brim is behind
 #   her (0-1), wave: soft ripples on the brim's edge, floppy: take the brim's swoopy shape from the
-#   model's own floppy pose (0-1), droop: extra brim droop (all around, at her sides)
+#   model's own floppy pose (0-1), droop: extra brim droop (all around, at her sides),
+#   tail_drop: tie her ponytails this much lower while she wears it
 SUNHAT_FITS = {
     "twintails":  {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True,
-                   "back": 0.4, "wave": 0.0, "floppy": 1.0, "droop": (0.0, 0.0)},
+                   "back": 0.4, "wave": 0.0, "floppy": 1.0, "droop": (0.0, 0.0),
+                   "tail_drop": 0.25},
     "shorttails": {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True,
-                   "back": 0.4, "wave": 0.0, "floppy": 1.0, "droop": (0.0, 0.0)},
+                   "back": 0.4, "wave": 0.0, "floppy": 1.0, "droop": (0.0, 0.0),
+                   "tail_drop": 0.25},
     "drills":     {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True,
-                   "back": 0.4, "wave": 0.0, "floppy": 1.0, "droop": (0.0, 0.0)},
+                   "back": 0.4, "wave": 0.0, "floppy": 1.0, "droop": (0.0, 0.0),
+                   "tail_drop": 0.25},
 }
 SUNHAT_STYLE = {}                        # style -> (frame, hat objects, fit)
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.84        # a roomy inside, so her hair fits under the hat
@@ -2810,9 +2814,14 @@ if OUTFITS_MODE:
                 o.hide_render = False
             STYLE_PICK = [style]
             CURRENT_OUTFIT = name + "-" + style
+            drop = fit.get("tail_drop", 0.0)       # ponytails tied lower, under the hat
+            for t in TAIL.values():
+                t.location.z -= drop
             saved = tuck_hair(sobjs) if fit["tuck"] else []
             render_states()
             untuck_hair(saved)
+            for t in TAIL.values():
+                t.location.z += drop
             for o in sobjs:
                 o.hide_render = True
             for o in objs:
