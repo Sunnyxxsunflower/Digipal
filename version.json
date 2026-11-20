@@ -1,5 +1,5 @@
 {
-  "version": 35,
+  "version": 36,
   "frames_version": 1,
   "frames_mb": 800,
   "frames_url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-1/pet_frames.zip",
@@ -43,6 +43,12 @@
       "url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-3/meditation_pack.zip",
       "mb": 65,
       "what": "meditation on the zafu"
+    },
+    {
+      "version": 4,
+      "url": "https://github.com/Sunnyxxsunflower/Digipal/releases/download/frames-4/new_hats_pack.zip",
+      "mb": 582,
+      "what": "new hats: beret, sun hat, glasses, star clip"
     }
   ]
 }
