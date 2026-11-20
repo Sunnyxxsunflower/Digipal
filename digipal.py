@@ -20,8 +20,8 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QTimeEdit, QCheckBox, QMessageBox, QGridLayout,
                                QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
                                QScrollArea, QComboBox, QSpinBox, QLayout, QStackedWidget,
-                               QGraphicsView, QGraphicsScene, QSlider)
-from PySide6.QtCore import QTime, QRect, QSize, QPoint, QUrl
+                               QGraphicsView, QGraphicsScene, QSlider, QCalendarWidget)
+from PySide6.QtCore import QTime, QRect, QSize, QPoint, QUrl, QDate
 
 IS_WIN = sys.platform == "win32"
 IS_LINUX = sys.platform.startswith("linux")
@@ -263,6 +263,14 @@ APP_LOCK = None                       # the "only one Digi" lock (let go of it w
 TODO_FILE = os.path.expanduser("~/.desk_pet_todo.json")
 REMINDER_FILE = os.path.expanduser("~/.desk_pet_reminders.json")
 WATER_FILE = os.path.expanduser("~/.desk_pet_water.json")
+# the cycle tracker (off unless you turn it on). Only ever kept in this file on your computer.
+CYCLE_FILE = os.path.expanduser("~/.desk_pet_cycle.json")
+CYCLE_HEADSUP = ["Heads up~ your cycle might start in about 2 days \U0001F338 Maybe pack your supplies!",
+                 "Psst, your cycle might be coming in a couple of days \U0001F338"]
+CYCLE_TODAY = ["Your cycle might start around today \U0001F338 Be gentle with yourself!",
+               "Cycle might be starting today~ \U0001F338 Tell me when it does!"]
+CYCLE_CARE = ["Cozy day? Remember water and a little rest \U0001F49C",
+              "Be extra kind to yourself today \U0001F338", "Warm drink and a snack? You deserve it \U0001F49C"]
 WATER_GOAL = 8          # glasses per day (you can change it from her menu)
 DICE = [20, 4, 6, 8, 10, 12, 100]
 SIT_OFFSET = 187        # how far above the window edge she sits
@@ -1351,6 +1359,11 @@ class CustomizeDialog(QDialog):
         med_scroll.setFrameShape(QFrame.NoFrame)
         med_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         med_scroll.setWidget(self.build_meditation())
+        lists_scroll = QScrollArea()             # the Lists tab: water, to-dos, reminders, birthdays
+        lists_scroll.setWidgetResizable(True)
+        lists_scroll.setFrameShape(QFrame.NoFrame)
+        lists_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        lists_scroll.setWidget(self.build_lists())
         # live preview of her
         self.preview = QLabel()
         self.preview.setAlignment(Qt.AlignCenter)
@@ -1359,7 +1372,7 @@ class CustomizeDialog(QDialog):
             self.preview.setParent(self)
             self.preview.setStyleSheet("background: transparent;")
             self.preview.setAttribute(Qt.WA_TransparentForMouseEvents)
-            for sc in (look_scroll, personal_scroll, med_scroll):
+            for sc in (look_scroll, personal_scroll, med_scroll, lists_scroll):
                 sc.setStyleSheet("QScrollArea { background: white; border: none; } "
                                  "QScrollArea > QWidget > QWidget { background: white; }")
             self.phone = QWidget(None if ROOM_TILT else self)
@@ -1390,11 +1403,12 @@ class CustomizeDialog(QDialog):
             self.pages.addWidget(look_scroll)
             self.pages.addWidget(personal_scroll)
             self.pages.addWidget(med_scroll)
+            self.pages.addWidget(lists_scroll)
             pl.addWidget(self.pages, 1)
             dock = QHBoxLayout()
-            dock.setSpacing(6)
+            dock.setSpacing(4)
             self.dock_buttons = []
-            for i, label in enumerate(("Look", "Me", "Calm")):
+            for i, label in enumerate(("Look", "Me", "Calm", "Lists")):
                 b = QPushButton(label)
                 b.setCheckable(True)
                 b.setProperty("class", "dock")
@@ -1412,7 +1426,7 @@ class CustomizeDialog(QDialog):
             col = QVBoxLayout(look)
             col.setContentsMargins(2, 2, 6, 2)
         else:
-            for sc in (look_scroll, personal_scroll, med_scroll):
+            for sc in (look_scroll, personal_scroll, med_scroll, lists_scroll):
                 sc.setStyleSheet("QScrollArea { background: transparent; } "
                                  "QScrollArea > QWidget > QWidget { background: #f6f3fb; }")
             main = QVBoxLayout(self)
@@ -1425,6 +1439,8 @@ class CustomizeDialog(QDialog):
             tabs.addTab(look_scroll, "Look")
             tabs.addTab(personal_scroll, "Personal settings")
             tabs.addTab(med_scroll, "Meditation")
+            tabs.addTab(lists_scroll, "Lists")
+            self.tabs = tabs
             outer = QHBoxLayout(look)
             self.preview.setFixedSize(220, 260)
             self.preview.setStyleSheet("background: #ece8f5; border-radius: 12px;")
@@ -1573,10 +1589,10 @@ class CustomizeDialog(QDialog):
                 QCheckBox { font-size: 11px; color: #3d4f75; }
                 QPushButton[class="opt"]:hover { background: #eef2f9; }
                 QPushButton[class="opt"]:checked { background: #7389b0; border-color: #4e6590; color: white; }
-                QPushButton[class="dock"] { padding: 4px 4px; font-size: 12px; border-radius: 10px; border: 1px solid #b8c5dc;
+                QPushButton[class="dock"] { padding: 4px 2px; font-size: 11px; border-radius: 10px; border: 1px solid #b8c5dc;
                                             background: #f3f6fb; color: #3d4f75; font-weight: bold; }
                 QPushButton[class="dock"]:checked { background: #dfe7f4; border-color: #7389b0; }
-                QPushButton[class="done"] { padding: 4px 4px; font-size: 12px; border-radius: 10px; border: 1px solid #4e6590;
+                QPushButton[class="done"] { padding: 4px 2px; font-size: 11px; border-radius: 10px; border: 1px solid #4e6590;
                                             background: #7389b0; color: white; font-weight: bold; }
                 QPushButton[class="done"]:hover { background: #637aa3; }
             """)
@@ -1606,11 +1622,289 @@ class CustomizeDialog(QDialog):
             print("customize size:", ex, file=sys.stderr, flush=True)
 
     # ---------- the room ----------
+    # ---------- the Lists tab: everything you keep track of with her, in one place ----------
+    def list_box(self, rows=4):
+        lw = QListWidget()
+        lw.setStyleSheet("QListWidget { border: 1px solid #ddd5ef; border-radius: 8px; background: white; "
+                         "color: #3a3159; } QListWidget::item { padding: 3px 4px; } "
+                         "QListWidget::item:selected { background: #efeaf9; color: #3a3159; }")
+        lw.setFixedHeight(24 * rows + 8)
+        return lw
+
+    def small_buttons(self, specs):
+        row = QHBoxLayout()
+        row.setSpacing(4)
+        for label, fn in specs:
+            b = self.option(label)
+            b.setCheckable(False)
+            b.clicked.connect(fn)
+            row.addWidget(b)
+        row.addStretch(1)
+        return row
+
+    def build_lists(self):
+        w = QWidget()
+        col = QVBoxLayout(w)
+        col.setContentsMargins(2, 2, 6, 2)
+        pet = self.pet
+
+        # water
+        col.addWidget(self.heading("Water \U0001F4A7"))
+        self.water_label = QLabel()
+        col.addWidget(self.water_label)
+        col.addLayout(self.small_buttons([("+1 glass", lambda *a: (pet.drink(), self.refresh_lists())),
+                                          ("Undo", lambda *a: (pet.undrink(), self.refresh_lists()))]))
+        wrow = QHBoxLayout()
+        wrow.addWidget(QLabel("Daily goal:"))
+        self.water_goal = QSpinBox()
+        self.water_goal.setRange(1, 30)
+        self.water_goal.valueChanged.connect(self.set_water_goal)
+        wrow.addWidget(self.water_goal)
+        wrow.addWidget(QLabel("glasses"))
+        wrow.addStretch(1)
+        col.addLayout(wrow)
+
+        # to-do list
+        col.addWidget(self.heading("To-do list \u2705"))
+        tip = QLabel("Tick a task when it's done!")
+        tip.setStyleSheet("color: #6b5f93; font-size: 11px;")
+        col.addWidget(tip)
+        self.todo_list = self.list_box(4)
+        self.todo_list.itemChanged.connect(self.todo_ticked)
+        col.addWidget(self.todo_list)
+        trow = QHBoxLayout()
+        self.todo_text = QLineEdit()
+        self.todo_text.setPlaceholderText("New task...")
+        self.todo_text.setMaxLength(80)
+        self.todo_text.returnPressed.connect(self.todo_add)
+        trow.addWidget(self.todo_text, 1)
+        add = self.option("Add")
+        add.setCheckable(False)
+        add.clicked.connect(self.todo_add)
+        trow.addWidget(add)
+        col.addLayout(trow)
+
+        # reminders
+        col.addWidget(self.heading("Reminders \u23F0"))
+        self.rem_list = self.list_box(5)
+        self.rem_list.itemDoubleClicked.connect(lambda *_: self.rem_edit())
+        col.addWidget(self.rem_list)
+        col.addLayout(self.small_buttons([("Add", self.rem_add), ("Change", self.rem_edit),
+                                          ("Delete", self.rem_delete)]))
+
+        # birthdays
+        col.addWidget(self.heading("Birthdays \U0001F382"))
+        self.bday_list = self.list_box(3)
+        self.bday_list.itemDoubleClicked.connect(lambda *_: self.bday_edit())
+        col.addWidget(self.bday_list)
+        col.addLayout(self.small_buttons([("Add", self.bday_add), ("Change", self.bday_edit),
+                                          ("Delete", self.bday_delete)]))
+
+        # cycle tracker: hidden unless it's switched on (the switch is the small box at the bottom)
+        self.cycle_box = QWidget()
+        cl = QVBoxLayout(self.cycle_box)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.addWidget(self.heading("Cycle \U0001F338"))
+        self.cycle_label = QLabel()
+        self.cycle_label.setWordWrap(True)
+        cl.addWidget(self.cycle_label)
+        cl.addLayout(self.small_buttons([("Started today", lambda *a: self.cycle_mark(date.today())),
+                                         ("Other day...", self.cycle_pick_day),
+                                         ("Undo", self.cycle_undo)]))
+        crow = QHBoxLayout()
+        crow.addWidget(QLabel("Usually lasts"))
+        self.cycle_len = QSpinBox()
+        self.cycle_len.setRange(1, 14)
+        self.cycle_len.valueChanged.connect(lambda v: self.cycle_set("period_len", v))
+        crow.addWidget(self.cycle_len)
+        crow.addWidget(QLabel("days"))
+        crow.addStretch(1)
+        cl.addLayout(crow)
+        self.cycle_notify = QCheckBox("Gentle heads-ups from Digi (never while streaming)")
+        self.cycle_notify.toggled.connect(lambda v: self.cycle_set("notify", v))
+        cl.addWidget(self.cycle_notify)
+        note = QLabel("Her guesses come from your past cycles, so they're just estimates. "
+                      "Everything stays only on this computer.")
+        note.setWordWrap(True)
+        note.setStyleSheet("color: #6b5f93; font-size: 11px;")
+        cl.addWidget(note)
+        col.addWidget(self.cycle_box)
+        col.addSpacing(8)
+        self.cycle_on = QCheckBox("Show cycle tracker \U0001F338")
+        self.cycle_on.setStyleSheet("color: #8a80aa; font-size: 11px;")
+        self.cycle_on.toggled.connect(self.cycle_toggle)
+        col.addWidget(self.cycle_on)
+        col.addStretch(1)
+        return w
+
+    def refresh_lists(self):
+        pet = self.pet
+        if not hasattr(self, "todo_list"):
+            return
+        n = pet.water_today()
+        self.water_label.setText(f"Today: {n} of {pet.water['goal']} glasses " + "\U0001F4A7" * min(n, 10))
+        self.water_goal.blockSignals(True)
+        self.water_goal.setValue(pet.water["goal"])
+        self.water_goal.blockSignals(False)
+        self.todo_list.blockSignals(True)
+        self.todo_list.clear()
+        for t in pet.todos:
+            it = QListWidgetItem(t)
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setCheckState(Qt.Unchecked)
+            self.todo_list.addItem(it)
+        if not pet.todos:
+            it = QListWidgetItem("(nothing yet!)")
+            it.setFlags(Qt.NoItemFlags)
+            self.todo_list.addItem(it)
+        self.todo_list.blockSignals(False)
+        pet.reminders.sort(key=lambda r: r[0])
+        self.rem_list.clear()
+        for r in pet.reminders:
+            self.rem_list.addItem(QListWidgetItem(reminder_label(r)))
+        pet.birthdays.sort(key=lambda b: days_until_birthday(b["month"], b["day"]))
+        self.bday_list.clear()
+        for b in pet.birthdays:
+            n = days_until_birthday(b["month"], b["day"])
+            when = "today!" if n == 0 else ("tomorrow" if n == 1 else f"in {n} days")
+            self.bday_list.addItem(QListWidgetItem(f"{birthday_label(b)}   ({when})"))
+        c = pet.cycle
+        self.cycle_on.blockSignals(True)
+        self.cycle_on.setChecked(bool(c.get("enabled")))
+        self.cycle_on.blockSignals(False)
+        self.cycle_box.setVisible(bool(c.get("enabled")))
+        self.cycle_len.blockSignals(True)
+        self.cycle_len.setValue(int(c.get("period_len", 5)))
+        self.cycle_len.blockSignals(False)
+        self.cycle_notify.blockSignals(True)
+        self.cycle_notify.setChecked(bool(c.get("notify", True)))
+        self.cycle_notify.blockSignals(False)
+        self.cycle_label.setText(pet.cycle_summary())
+
+    def set_water_goal(self, n):
+        self.pet.water["goal"] = n
+        self.pet.save_water()
+        self.refresh_lists()
+
+    def todo_add(self):
+        t = self.todo_text.text().strip()
+        if not t:
+            return
+        self.pet.todos.append(t[:80])
+        self.pet.save_todos()
+        self.pet.say("Added! You've got this~", 2200)
+        self.pet.happy = 15
+        self.todo_text.clear()
+        self.refresh_lists()
+
+    def todo_ticked(self, item):
+        if item.checkState() == Qt.Checked:
+            i = self.todo_list.row(item)
+            QTimer.singleShot(250, lambda: (self.pet.finish_todo(i), self.refresh_lists()))
+
+    def rem_add(self):
+        dlg = ReminderEdit(self)
+        if dlg.exec():
+            self.pet.reminders.append(dlg.result_item())
+            save_reminders(self.pet.reminders)
+            self.refresh_lists()
+
+    def rem_edit(self):
+        i = self.rem_list.currentRow()
+        if i < 0:
+            return
+        dlg = ReminderEdit(self, self.pet.reminders[i])
+        if dlg.exec():
+            self.pet.reminders[i] = dlg.result_item()
+            save_reminders(self.pet.reminders)
+            self.refresh_lists()
+
+    def rem_delete(self):
+        i = self.rem_list.currentRow()
+        if i < 0:
+            return
+        r = self.pet.reminders[i]
+        if QMessageBox.question(self, "Delete reminder",
+                                "Delete this reminder?\n\n" + reminder_label(r)) == QMessageBox.Yes:
+            del self.pet.reminders[i]
+            save_reminders(self.pet.reminders)
+            self.refresh_lists()
+
+    def bday_add(self):
+        dlg = BirthdayEdit(self)
+        if dlg.exec():
+            b = dlg.result_item()
+            self.pet.birthdays.append(b)
+            self.pet.save_custom()
+            self.pet.say(f"Got it! I'll remember {b['name']}'s birthday \U0001F382", 3000)
+            self.refresh_lists()
+
+    def bday_edit(self):
+        i = self.bday_list.currentRow()
+        if i < 0:
+            return
+        dlg = BirthdayEdit(self, self.pet.birthdays[i])
+        if dlg.exec():
+            self.pet.birthdays[i] = dlg.result_item()
+            self.pet.save_custom()
+            self.refresh_lists()
+
+    def bday_delete(self):
+        i = self.bday_list.currentRow()
+        if i < 0:
+            return
+        b = self.pet.birthdays[i]
+        if QMessageBox.question(self, "Delete birthday",
+                                "Forget this birthday?\n\n" + birthday_label(b)) == QMessageBox.Yes:
+            del self.pet.birthdays[i]
+            self.pet.save_custom()
+            self.refresh_lists()
+
+    def cycle_toggle(self, on):
+        self.pet.cycle["enabled"] = bool(on)
+        self.pet.save_cycle()
+        self.refresh_lists()
+
+    def cycle_set(self, key, value):
+        self.pet.cycle[key] = value
+        self.pet.save_cycle()
+        self.refresh_lists()
+
+    def cycle_mark(self, day):
+        self.pet.cycle_started(day)
+        self.refresh_lists()
+
+    def cycle_pick_day(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("When did it start?")
+        lay = QVBoxLayout(dlg)
+        cal = QCalendarWidget()
+        cal.setMaximumDate(QDate.currentDate())
+        lay.addWidget(cal)
+        ok = QPushButton("Save")
+        ok.clicked.connect(dlg.accept)
+        lay.addWidget(ok)
+        if dlg.exec():
+            d = cal.selectedDate()
+            self.cycle_mark(date(d.year(), d.month(), d.day()))
+
+    def cycle_undo(self):
+        if self.pet.cycle.get("starts"):
+            self.pet.cycle["starts"].pop()
+            self.pet.save_cycle()
+        self.refresh_lists()
+
     def show_page(self, i):
+        if not self.in_room:
+            if hasattr(self, "tabs"):
+                self.tabs.setCurrentIndex(i)
+            return
         self.pages.setCurrentIndex(i)
-        self.phone_title.setText(("Customize Digi", "About you", "Meditation")[i])
+        self.phone_title.setText(("Customize Digi", "About you", "Meditation", "My lists")[i])
         for j, b in enumerate(self.dock_buttons):
             b.setChecked(i == j)
+        if i == 3:
+            self.refresh_lists()
 
     def hrow(self):
         return FlowLayout() if self.in_room else QHBoxLayout()
@@ -1893,7 +2187,7 @@ class CustomizeDialog(QDialog):
         row.addWidget(lab, 1)
         edit = self.option("Edit my reminders...")
         edit.setCheckable(False)
-        edit.clicked.connect(lambda *a: self.pet.open_reminders())
+        edit.clicked.connect(lambda *a: self.show_page(3))             # the Lists tab
         row.addWidget(edit)
         col.addLayout(row)
 
@@ -1918,7 +2212,7 @@ class CustomizeDialog(QDialog):
         row.addStretch(1)
         friends = self.option("Other birthdays...")
         friends.setCheckable(False)
-        friends.clicked.connect(lambda *a: self.pet.open_birthdays())
+        friends.clicked.connect(lambda *a: self.show_page(3))
         row.addWidget(friends)
         col.addLayout(row)
 
@@ -2051,6 +2345,7 @@ class CustomizeDialog(QDialog):
 
     def refresh(self):
         pet = self.pet
+        self.refresh_lists()
         for k, b in self.style_hair_buttons.items():
             b.setChecked(k == pet.hairstyle)
         for k, b in self.bubble_buttons.items():
@@ -3004,6 +3299,7 @@ class Pet(QWidget):
         self.cheer_next = 0
         self.greeted = None
         self.todos = self.load_todos()
+        self.cycle = self.load_cycle()
         self.reminders = load_reminders()
         # ball, gravity, dice, stream, water
         self.ball = None
@@ -3468,6 +3764,94 @@ class Pet(QWidget):
                 return name
         return "idle"
 
+    # ---------- cycle tracker (off unless switched on; lives only in CYCLE_FILE) ----------
+    def load_cycle(self):
+        data = {"enabled": False, "starts": [], "period_len": 5, "notify": True, "said": ""}
+        try:
+            with open(CYCLE_FILE, "r") as f:
+                data.update(json.load(f))
+        except Exception:
+            pass
+        return data
+
+    def save_cycle(self):
+        try:
+            with open(CYCLE_FILE, "w") as f:
+                json.dump(self.cycle, f)
+        except Exception:
+            pass
+
+    def cycle_started(self, day):
+        starts = sorted(set(self.cycle.get("starts", [])) | {day.isoformat()})
+        self.cycle["starts"] = starts[-24:]
+        self.save_cycle()
+        self.say("Noted \U0001F338 Be gentle with yourself~", 2600)
+
+    def cycle_guess(self):
+        """(last start, average length, next start) from the last few cycles, or None."""
+        starts = [date.fromisoformat(x) for x in self.cycle.get("starts", [])]
+        if not starts:
+            return None
+        gaps = [(b - a).days for a, b in zip(starts, starts[1:]) if 15 <= (b - a).days <= 60]
+        avg = round(sum(gaps[-6:]) / len(gaps[-6:])) if gaps else 28
+        last = starts[-1]
+        nxt = last + timedelta(days=avg)
+        while nxt < date.today() - timedelta(days=3):   # a start wasn't logged: guess the next one
+            nxt += timedelta(days=avg)
+        return last, avg, nxt
+
+    def cycle_summary(self):
+        g = self.cycle_guess()
+        if not g:
+            return "Tap \"Started today\" when your next period starts, and I'll start keeping track!"
+        last, avg, nxt = g
+        today = date.today()
+        n = (nxt - today).days
+        day_in = (today - last).days + 1
+        lines = [f"Last started: {last:%b} {last.day} (today is day {day_in})"]
+        if n > 1:
+            lines.append(f"Next might start around {nxt:%b} {nxt.day} (in about {n} days)")
+        elif n == 1:
+            lines.append("Next might start around tomorrow")
+        elif n == 0:
+            lines.append("Next might start around today")
+        else:
+            lines.append(f"Next was expected around {nxt:%b} {nxt.day}")
+        lines.append(f"Usual cycle: about {avg} days" + ("" if len(self.cycle["starts"]) > 1
+                                                        else " (a guess until I've seen two)"))
+        return "\n".join(lines)
+
+    def check_cycle(self):
+        """A gentle heads-up a couple of days before, on the day, and a kind word during. Only to
+        you: never while streaming or when OBS is open, and never as a big reminder pop-up."""
+        c = self.cycle
+        if not c.get("enabled") or not c.get("notify"):
+            return
+        now = datetime.now()
+        today = now.date()
+        if c.get("said") == today.isoformat() or now.hour < 10 or self.sleep_hours:
+            return
+        if self.streaming or self.obs_open or self.msg or self.reminder_active:
+            return
+        g = self.cycle_guess()
+        if not g:
+            return
+        last, avg, nxt = g
+        n = (nxt - today).days
+        in_period = 0 <= (today - last).days < int(c.get("period_len", 5))
+        line = None
+        if n == 2:
+            line = random.choice(CYCLE_HEADSUP)
+        elif n == 0:
+            line = random.choice(CYCLE_TODAY)
+        elif in_period and (today - last).days in (0, 1):
+            line = random.choice(CYCLE_CARE)
+        c["said"] = today.isoformat()
+        self.save_cycle()
+        if line:
+            self.say(line, 6000)
+            self.happy = 15
+
     # ---------- to-do list ----------
     def load_todos(self):
         try:
@@ -3676,72 +4060,68 @@ class Pet(QWidget):
 
     def contextMenuEvent(self, e):
         menu = QMenu(self)
-        menu.addAction("\u2728 Customize Digi...", self.open_customize)
+        menu.addAction("\u2728 Customize Digi...", lambda *a: self.open_customize())
         menu.addSeparator()
         menu.addAction("Say hi", self.poke)
         menu.addAction("Come here!", self.come_here)
+        names = {"gaming": "Video games", "movie": "Movie", "stream": "Stream", "cheer": "Cheer me on"}
+        now_mode = self.current_mode()
+        menu.addAction("\U0001F3AE Modes..." + ("  (now: %s)" % names[now_mode] if now_mode in names else ""),
+                       self.show_modes)
+        menu.addSeparator()
 
         if self.med_end:
-            menu.addAction("Stop meditating", lambda: self.stop_meditation(early=True))
+            menu.addAction("\U0001F9D8 Stop meditating", lambda: self.stop_meditation(early=True))
         else:
-            mm = menu.addMenu("Meditate \U0001F9D8")
+            mm = menu.addMenu("\U0001F9D8 Meditate")
             for m in MED_CHOICES:
                 mm.addAction(minutes_label(m), lambda *a, m=m: self.start_meditation(m))
             mm.addSeparator()
             self.add_toggle(mm, "Breathing guide (in / hold / out)", self.med_guide, self.set_med_guide)
             mm.addAction("My meditation stats", self.say_med_stats)
-            mm.addAction("Ask me now (test the daily invite)", self.invite_meditation)
+
+        # timers
         if self.focus_end or self.break_end:
-            menu.addAction("Stop timer", self.stop_focus)
+            menu.addAction("\u23F0 Stop timer", self.stop_focus)
         else:
-            fm = menu.addMenu("Focus timer")
+            tmr = menu.addMenu("\u23F0 Timers")
+            fm = tmr.addMenu("Focus timer")
             fm.addAction(f"Pomodoro ({POMODORO_FOCUS} focus + {POMODORO_BREAK} break)",
                          self.start_pomodoro)
             fm.addSeparator()
             for m in TIMER_CHOICES:
-                fm.addAction(minutes_label(m),
-                             lambda *a, m=m: self.start_focus(m))
+                fm.addAction(minutes_label(m), lambda *a, m=m: self.start_focus(m))
+            rm = tmr.addMenu("Remind me in...")
+            for m in TIMER_CHOICES:
+                rm.addAction(minutes_label(m), lambda *a, m=m: self.ask_reminder(m))
 
-        rm = menu.addMenu("Remind me in...")
-        for m in TIMER_CHOICES:
-            rm.addAction(minutes_label(m),
-                         lambda *a, m=m: self.ask_reminder(m))
-
-        menu.addAction(f"My reminders ({len(self.reminders)})...",
-                       self.open_reminders)
-        menu.addAction(f"Birthdays ({len(self.birthdays)})...", self.open_birthdays)
-
+        # lists: the quick things here, everything else on the Lists tab
         w = self.water_today()
-        wm = menu.addMenu(f"Water ({w}/{self.water['goal']})")
-        wm.addAction("I drank some water!", self.drink)
-        if w:
-            wm.addAction("Oops, undo", self.undrink)
-        wm.addAction("Change daily goal...", self.set_water_goal)
+        lm = menu.addMenu("\U0001F4CB My lists")
+        lm.addAction(f"I drank water! ({w}/{self.water['goal']})", self.drink)
+        lm.addAction("Add a to-do...", self.add_todo)
+        if self.todos:
+            dm2 = lm.addMenu(f"Check off a to-do ({len(self.todos)})")
+            for i, task in enumerate(self.todos):
+                dm2.addAction(task[:30], lambda *a, i=i: self.finish_todo(i))
+        lm.addSeparator()
+        lm.addAction("Open my lists (reminders, birthdays...)", lambda *a: self.open_customize(3))
 
-        dm = menu.addMenu("Roll dice")
+        # play
+        pm = menu.addMenu("\U0001F3B2 Play")
+        if self.ball:
+            pm.addAction("Put the ball away", self.end_ball)
+        else:
+            pm.addAction("Toss a ball!", self.toss_ball)
+        pm.addAction("Throw a bomb! \U0001F4A3", self.throw_bomb)
+        dm = pm.addMenu("Roll dice")
         for sides in DICE:
             dm.addAction(f"d{sides}", lambda *a, n=sides: self.roll_dice(n))
         dm.addSeparator()
         dm.addAction("Advantage (2d20)", lambda *a: self.roll_dice(20, 2))
         dm.addAction("Custom roll... (like 5d20+3)", self.custom_roll)
 
-        if self.ball:
-            menu.addAction("Put the ball away", self.end_ball)
-        else:
-            menu.addAction("Toss a ball!", self.toss_ball)
-        menu.addAction("Throw a bomb! \U0001F4A3", self.throw_bomb)
-
-        tm = menu.addMenu(f"To-do list ({len(self.todos)})")
-        tm.addAction("Add a task...", self.add_todo)
-        if self.todos:
-            tm.addSeparator()
-            for i, task in enumerate(self.todos):
-                tm.addAction("Check off: " + task[:30],
-                             lambda *a, i=i: self.finish_todo(i))
-            tm.addSeparator()
-            tm.addAction("Clear all", self.clear_todos)
-
-        om = menu.addMenu("Outfit")
+        om = menu.addMenu("\U0001F457 Outfit")
         for key, label in ACC_MENU:
             self.add_toggle(om, label, self.acc_mode == key,
                             lambda v, k=key: self.set_outfit(k))
@@ -3750,41 +4130,58 @@ class Pet(QWidget):
                         lambda v: self.set_outfit_style("3d"))
         self.add_toggle(om, "Style: drawn (flat)", self.outfit_style == "drawn",
                         lambda v: self.set_outfit_style("drawn"))
-        names = {"gaming": "Video games", "movie": "Movie", "stream": "Stream", "cheer": "Cheer me on"}
-        now_mode = self.current_mode()
-        menu.addAction("Modes \U0001F3AE\U0001F37F\U0001F3A5" +
-                       ("  (now: %s)" % names[now_mode] if now_mode in names else ""), self.show_modes)
-        menu.addAction("Steam status", self.show_steam_status)
-        menu.addAction("Test reminder", lambda: self.remind("Time for dinner!"))
+        menu.addSeparator()
 
-        sm = menu.addMenu("Settings")
-        self.add_toggle(sm, "Wander around", self.wander, self.set_wander)
-        self.add_toggle(sm, "Follow my mouse sometimes",
-                        self.follow_enabled, self.set_follow)
+        sm = menu.addMenu("\u2699\uFE0F Settings")
+        bh = sm.addMenu("What she does")
+        self.add_toggle(bh, "Wander around", self.wander, self.set_wander)
+        self.add_toggle(bh, "Follow my mouse sometimes", self.follow_enabled, self.set_follow)
         win_label = "Hang out with my windows"
         if not HAS_WINLIST:
             win_label += " (needs setup)"
-        self.add_toggle(sm, win_label, self.windows_enabled, self.set_windows)
-        self.add_toggle(sm, "Sing along to music", self.sing_enabled, self.set_sing)
-        self.add_toggle(sm, "Dance to music", self.dance_enabled, self.set_dance)
-        self.add_toggle(sm, "React to my apps", self.react_enabled, self.set_react)
-        self.add_toggle(sm, "React to Steam", self.steam_enabled, self.set_steam)
-        self.add_toggle(sm, "Welcome-back greeting",
-                        self.welcome_enabled, self.set_welcome)
-        self.add_toggle(sm, "Eye-rest nudges", self.eye_enabled, self.set_eye)
-        self.add_toggle(sm, "Fall when I drop her", self.gravity_enabled,
-                        self.set_gravity)
-        self.add_toggle(sm, "Stream mode when OBS is open", self.stream_enabled,
-                        self.set_stream_auto)
-        sm.addSeparator()
+        self.add_toggle(bh, win_label, self.windows_enabled, self.set_windows)
+        self.add_toggle(bh, "Fall when I drop her", self.gravity_enabled, self.set_gravity)
+        bh.addSeparator()
+        self.add_toggle(bh, "Sing along to music", self.sing_enabled, self.set_sing)
+        self.add_toggle(bh, "Dance to music", self.dance_enabled, self.set_dance)
+        self.add_toggle(bh, "React to my apps", self.react_enabled, self.set_react)
+        self.add_toggle(bh, "React to Steam", self.steam_enabled, self.set_steam)
+        self.add_toggle(bh, "Stream mode when OBS is open", self.stream_enabled, self.set_stream_auto)
+        bh.addSeparator()
+        self.add_toggle(bh, "Welcome-back greeting", self.welcome_enabled, self.set_welcome)
+        self.add_toggle(bh, "Eye-rest nudges", self.eye_enabled, self.set_eye)
+
+        fm = sm.addMenu("Fun stuff she does on her own")
+        for key, label in [("bubbles", "Blowing bubbles"), ("crystal", "Crystal ball"),
+                           ("teleport", "Teleporting"), ("dnd_solo", "D&D solo play (%s from 7pm)" % (" & ".join(self.dnd_days) or "pick your game nights")),
+                           ("cursor", "Playing with the cursor"), ("flowers", "Picking flowers"),
+                           ("cuddle", "Night cuddles"), ("typing", "Typing along with you"),
+                           ("camera", "Camera when you take a screenshot"),
+                           ("weather_report", "Weather reports (%s)" % ((self.place or {}).get("name") or "set your city first")),
+                           ("weather_react", "Reacting to the weather")]:
+            self.add_toggle(fm, label, self.fun[key],
+                            lambda v, k=key: self.fun.__setitem__(k, v))
+        self.add_toggle(fm, "Tarot card readings", self.tarot_enabled,
+                        lambda v: setattr(self, "tarot_enabled", v))
+        self.add_toggle(fm, "Snack time", self.snacks_enabled,
+                        lambda v: setattr(self, "snacks_enabled", v))
+        self.add_toggle(fm, "Sand castles", self.castles_enabled,
+                        lambda v: setattr(self, "castles_enabled", v))
+
+        bm = sm.addMenu("Nap bed")
+        for key, name in [("random", "Surprise me (random)")] + list(self.BED_NAMES.items()) + [("none", "No bed (doze standing)")]:
+            self.add_toggle(bm, name, self.bed_choice == key,
+                            lambda v, k=key: self.set_bed_choice(k))
+
+        vm = sm.addMenu("Voice")
         if self.ears is not None and dv.HAS_VOICE:
-            self.add_toggle(sm, "Always listen for \"Hey Digi\"", self.listen_always,
+            self.add_toggle(vm, "Always listen for \"Hey Digi\"", self.listen_always,
                             self.set_listen_always)
         else:
-            sm.addAction("Voice: needs setup (" + INSTALL_HINT.rstrip("~") + ")", self.voice_help)
-        sm.addAction("Voice: what can I say?", self.voice_help)
+            vm.addAction("Needs setup (" + INSTALL_HINT.rstrip("~") + ")", self.voice_help)
+        vm.addAction("What can I say?", self.voice_help)
         if self.ears is not None and dv.HAS_VOICE:
-            mm = sm.addMenu("Voice: which microphone?")
+            mm = vm.addMenu("Which microphone?")
             mics = dv.list_microphones()
             if IS_WIN:
                 mics = []
@@ -3798,23 +4195,27 @@ class Pet(QWidget):
                                 lambda v, u=uid, n=name: self.pick_mic(u, n))
             if not mics and not IS_WIN:
                 mm.addAction("(no microphones found)").setEnabled(False)
-        sm.addAction("Voice: check my ears", self.check_ears)
+        vm.addAction("Check my ears", self.check_ears)
         sm.addSeparator()
-        sm.addAction("Test: sit on a window", self.sit_now)
-        sm.addAction("Test: play peekaboo", self.peek_now)
+        self.add_toggle(sm, "Start when I log in", autostart_enabled(), self.set_autostart)
+
+        # every "show me now" tool in one place
+        tm = menu.addMenu("\U0001F9EA Try it now")
+        tm.addAction("Sit on a window", self.sit_now)
+        tm.addAction("Play peekaboo", self.peek_now)
         if time.time() < self.nap_until:
-            sm.addAction("Test: wake her up", self.wake_up)
+            tm.addAction("Wake her up", self.wake_up)
         else:
-            tm2 = sm.addMenu("Test: take a nap (30 sec)")
+            tm2 = tm.addMenu("Take a nap (30 sec)")
             tm2.addAction("Standing up (no bed)", lambda *a: self.test_nap("none"))
             for key, name in self.BED_NAMES.items():
                 act = tm2.addAction(name, lambda *a, k=key: self.test_nap(k))
                 act.setEnabled(("sleep_" + key) in self.frames)
-        sm.addAction("Test: pull a tarot card", lambda *a: self.start_activity("tarot"))
-        sm.addAction("Test: snack time", lambda *a: self.start_activity("snack"))
-        sm.addAction("Test: build a sand castle", lambda *a: self.start_activity("castle"))
-        tm3 = sm.addMenu("Test: more fun stuff")
-        for label, fn in [("Blow bubbles", lambda *a: self.start_activity("bubbles")),
+        tm.addAction("Stretch", self.test_stretch)
+        for label, fn in [("Pull a tarot card", lambda *a: self.start_activity("tarot")),
+                          ("Snack time", lambda *a: self.start_activity("snack")),
+                          ("Build a sand castle", lambda *a: self.start_activity("castle")),
+                          ("Blow bubbles", lambda *a: self.start_activity("bubbles")),
                           ("Crystal ball", lambda *a: self.start_activity("crystal")),
                           ("Teleport", self.start_teleport),
                           ("D&D solo play", lambda *a: self.start_activity("dnd")),
@@ -3823,37 +4224,19 @@ class Pet(QWidget):
                           ("Night cuddles", lambda *a: self.start_activity("cuddle")),
                           ("Typing along", lambda *a: self.start_activity("typing")),
                           ("Take a photo", self.take_photo),
-                          ("Get shy", self.get_shy),
-                          ("Weather report now", lambda *a: self.tell_weather(True)),
-                          ("Weather: cold", lambda *a: self.weather_react("cold")),
-                          ("Weather: hot", lambda *a: self.weather_react("hot")),
-                          ("Weather: rain", lambda *a: self.weather_react("rain")),
-                          ("Weather: thunder", lambda *a: self.weather_react("thunder"))]:
-            tm3.addAction(label, fn)
-        fm = sm.addMenu("Fun stuff on/off")
-        for key, label in [("bubbles", "Blowing bubbles"), ("crystal", "Crystal ball"),
-                           ("teleport", "Teleporting"), ("dnd_solo", "D&D solo play (%s from 7pm)" % (" & ".join(self.dnd_days) or "pick your game nights")),
-                           ("cursor", "Playing with the cursor"), ("flowers", "Picking flowers"),
-                           ("cuddle", "Night cuddles"), ("typing", "Typing along with you"),
-                           ("camera", "Camera when you take a screenshot"),
-                           ("weather_report", "Weather reports (%s)" % ((self.place or {}).get("name") or "set your city first")),
-                           ("weather_react", "Reacting to the weather")]:
-            self.add_toggle(fm, label, self.fun[key],
-                            lambda v, k=key: self.fun.__setitem__(k, v))
-        sm.addAction("Test: stretch", self.test_stretch)
-        self.add_toggle(sm, "Tarot card readings", self.tarot_enabled,
-                        lambda v: setattr(self, "tarot_enabled", v))
-        self.add_toggle(sm, "Snack time", self.snacks_enabled,
-                        lambda v: setattr(self, "snacks_enabled", v))
-        self.add_toggle(sm, "Sand castles", self.castles_enabled,
-                        lambda v: setattr(self, "castles_enabled", v))
-        bm = sm.addMenu("Nap bed")
-        for key, name in [("random", "Surprise me (random)")] + list(self.BED_NAMES.items()) + [("none", "No bed (doze standing)")]:
-            self.add_toggle(bm, name, self.bed_choice == key,
-                            lambda v, k=key: self.set_bed_choice(k))
-        sm.addSeparator()
-        self.add_toggle(sm, "Start when I log in",
-                        autostart_enabled(), self.set_autostart)
+                          ("Get shy", self.get_shy)]:
+            tm.addAction(label, fn)
+        wm = tm.addMenu("Weather")
+        for label, fn in [("Weather report now", lambda *a: self.tell_weather(True)),
+                          ("Cold", lambda *a: self.weather_react("cold")),
+                          ("Hot", lambda *a: self.weather_react("hot")),
+                          ("Rain", lambda *a: self.weather_react("rain")),
+                          ("Thunder", lambda *a: self.weather_react("thunder"))]:
+            wm.addAction(label, fn)
+        tm.addSeparator()
+        tm.addAction("Meditation invite", self.invite_meditation)
+        tm.addAction("A test reminder", lambda: self.remind("Time for dinner!"))
+        tm.addAction("Steam status", self.show_steam_status)
 
         menu.addSeparator()
         if getattr(self, "update_info", None):
@@ -5441,12 +5824,14 @@ class Pet(QWidget):
         self.happy = 15
 
     # ---------- customizing ----------
-    def open_customize(self):
+    def open_customize(self, page=None):
         self.dragging = False
         self.ptt_timer.stop() if hasattr(self, "ptt_timer") else None
         if self.custom_win is None:
             self.custom_win = CustomizeDialog(self)
         self.custom_win.refresh()
+        if page is not None:
+            self.custom_win.show_page(page)
         self.custom_win.show()
         self.custom_win.raise_()
         self.custom_win.activateWindow()
@@ -6600,6 +6985,7 @@ class Pet(QWidget):
 
     def check_reminders(self):
         self.check_birthdays()
+        self.check_cycle()
         now = datetime.now()
         key = now.strftime("%H:%M")
         today = now.strftime("%Y-%m-%d")
