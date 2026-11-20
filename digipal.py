@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
                                QScrollArea, QComboBox, QSpinBox, QLayout, QStackedWidget,
                                QGraphicsView, QGraphicsScene, QSlider, QCalendarWidget,
-                               QPlainTextEdit)
+                               QPlainTextEdit, QFileDialog)
 from PySide6.QtCore import QTime, QRect, QSize, QPoint, QUrl, QDate
 
 IS_WIN = sys.platform == "win32"
@@ -365,6 +365,20 @@ def dnd_next_game(games, now):
             if st > now and (best is None or st < best[1]):
                 best = (g, st)
     return best
+
+
+def dnd_notes_text(games):
+    """Notes for these games as plain text (for saving to a file)."""
+    parts = []
+    for g in games:
+        t = datetime.strptime(g["start"], "%H:%M").strftime("%I:%M %p").lstrip("0")
+        role = "DM" if g["role"] == "dm" else "Player"
+        head = [g["title"], "=" * max(3, len(g["title"])),
+                f"{role}" + (f" as {g['char']}" if g["char"] else ""),
+                f"Game days: {', '.join(g['days']) or '(none)'} at {t}", ""]
+        parts.append("\n".join(head) + "\n" + (g["notes"].strip() or "(no notes yet)") + "\n")
+    stamp = datetime.now().strftime("%B %d, %Y").replace(" 0", " ")
+    return f"D&D notes from Digi \u00b7 saved {stamp}\n\n" + "\n\n".join(parts)
 
 
 def dnd_game_label(g):
@@ -2054,6 +2068,8 @@ class CustomizeDialog(QDialog):
         col.addWidget(self.heading("Session notes \U0001F4DC"))
         col.addLayout(self.small_buttons([("Pop out \u2197 (keep it open while you play)",
                                            lambda *a: self.pet.open_dnd_notes(self.notes_game.currentIndex()))]))
+        col.addLayout(self.small_buttons([("Export this game...", lambda *a: self.notes_export(False)),
+                                          ("Export all games...", lambda *a: self.notes_export(True))]))
         self.notes_game = QComboBox()
         self.notes_game.currentIndexChanged.connect(self.notes_show)
         col.addWidget(self.notes_game)
@@ -2245,6 +2261,12 @@ class CustomizeDialog(QDialog):
         self.notes_box.blockSignals(False)
         self.notes_box.setPlaceholderText("NPC names, loot, what happened last time..." if games
                                           else "Add a game first, then your notes go here~")
+
+    def notes_export(self, everything):
+        i = self.notes_game.currentIndex()
+        if not everything and not (0 <= i < len(self.pet.dnd_games)):
+            return
+        self.pet.export_dnd_notes(self, None if everything else i)
 
     def notes_changed(self):
         i = self.notes_game.currentIndex()
@@ -2891,6 +2913,11 @@ class DndNotesWindow(QWidget):
             b.setToolTip(tip)
             b.clicked.connect(lambda *a, st=step: self.font_step(st))
             top.addWidget(b)
+        save = QPushButton("Export")
+        save.setToolTip("Save these notes to a file")
+        save.clicked.connect(lambda *a: self.pet.export_dnd_notes(self, self.game.currentIndex())
+                             if self.game.currentIndex() >= 0 else None)
+        top.addWidget(save)
         self.pin = QPushButton("\U0001F4CC")
         self.pin.setToolTip("Keep this window on top of everything")
         self.pin.setCheckable(True)
@@ -7749,6 +7776,30 @@ class Pet(QWidget):
         self.notes_win.show()
         self.notes_win.raise_()
         self.notes_win.activateWindow()
+
+    def export_dnd_notes(self, parent=None, index=None):
+        """Save one game's notes (or all of them) to a text file you pick."""
+        games = self.dnd_games if index is None else self.dnd_games[index:index + 1]
+        if not games:
+            self.say("No notes to save yet~", 2500)
+            return
+        base = "D&D notes" if index is None else (re.sub(r'[\\/:*?"<>|]', "", games[0]["title"]).strip()
+                                                 or "D&D") + " notes"
+        folder = os.path.expanduser("~/Documents")
+        if not os.path.isdir(folder):
+            folder = os.path.expanduser("~")
+        path, _ = QFileDialog.getSaveFileName(parent, "Save your D&D notes",
+                                              os.path.join(folder, base + ".txt"),
+                                              "Text file (*.txt);;Markdown (*.md)")
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(dnd_notes_text(games))
+        except Exception as ex:
+            QMessageBox.warning(parent, "Couldn't save", f"I couldn't save the notes there:\n{ex}")
+            return
+        self.say(f"Saved! Your notes are in {os.path.basename(path)} \U0001F4DC", 3500)
 
     def dnd_notes_set(self, i, text, source=None):
         """Notes typed in the D&D tab or the pop-out: kept, saved a moment later, shown in both."""
