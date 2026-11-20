@@ -1524,6 +1524,38 @@ bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.04, loc
 z.append(obj_part(made(), zafu_btn, None))           # the little button peeking out in front
 PROPS2["zafu"] = z
 
+# a game controller for video game mode: lilac, with a d-pad, two sticks and four pastel buttons.
+# It's built on its own little frame (PAD) so each frame of her playing can wiggle it a bit.
+PAD = empty("GamePad", (0, -0.5, 1.02), ROOT)
+pad_body = prop_mat("pad_body", "#c9bdf0", 0.45)
+pad_dark = prop_mat("pad_dark", "#4b3f7a", 0.5)
+pad = []
+bpy.ops.mesh.primitive_cube_add(size=1)
+o = made()
+o.scale = (0.34, 0.15, 0.06)
+bv = o.modifiers.new("Soft", "BEVEL")
+bv.width = 0.035
+bv.segments = 4
+pad.append(hat_part(o, pad_body, PAD, (0, 0, 0)))                         # the body
+for sx in (-1, 1):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
+    o = made()
+    o.scale = (0.075, 0.11, 0.06)
+    pad.append(hat_part(o, pad_body, PAD, (0.13 * sx, -0.08, -0.01), (0, 0, math.radians(-14 * sx))))  # grips
+    bpy.ops.mesh.primitive_cylinder_add(vertices=20, radius=0.022, depth=0.03)
+    pad.append(hat_part(made(), pad_dark, PAD, (0.045 * sx, -0.035, 0.035)))  # the two sticks
+for sz in ((0.055, 0.017), (0.017, 0.055)):
+    bpy.ops.mesh.primitive_cube_add(size=1)
+    o = made()
+    o.scale = (sz[0], sz[1], 0.014)
+    pad.append(hat_part(o, pad_dark, PAD, (-0.095, 0.022, 0.034)))           # the d-pad
+for col, (dx, dy) in zip(("#f7a8c8", "#8fdcc3", "#ffd970", "#8cc8f2"),
+                         ((0, 0.026), (0.026, 0), (-0.026, 0), (0, -0.026))):
+    bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.013, depth=0.016)
+    pad.append(hat_part(made(), prop_mat("pad_btn" + col, col, 0.35), PAD,
+                        (0.095 + dx, 0.022 + dy, 0.034)))                   # the four buttons
+PROPS2["gamepad"] = pad
+
 # umbrella in her right hand: a half-dome canopy with ribs and a scalloped rim,
 # held out to her right so the pole isn't hidden behind her head
 def half_dome(radius, height, center, mat):
@@ -2734,6 +2766,23 @@ def render_states():
         tilt(HEAD, 1.5 * w)
         tails(1.5 * w, 1.5 * w)
         shoot("meditate", i)
+
+    # gaming: sitting on the floor in her corner, holding her controller up in front of her and
+    # mashing buttons: the controller wiggles, her head bobs along, a little kick now and then
+    for i in range(8):
+        reset()
+        w, w2 = wave(i, 8), wave(i, 4)
+        ROOT.location = (0, 0, -0.46)
+        for s in (-1, 1):
+            LEG[s].rotation_euler = (math.radians(-(84 + 5 * w * s)), math.radians(-s * 8), 0)
+        show2("gamepad")
+        PAD.location = (0, -0.5, 1.02 + 0.012 * w2)
+        PAD.rotation_euler = (math.radians(53 + 4 * w2), 0, math.radians(5 * w))
+        for s in (-1, 1):
+            aim_arm(s, (0.14 * s, -0.55, 0.97 + 0.012 * w2 + 0.01 * w * s))
+        tilt(HEAD, 3 * w)
+        tails(2 * w, -2 * w)
+        shoot("gaming", i)
 
 
     # shy: hands on her cheeks, eyes squeezed happy, blushing

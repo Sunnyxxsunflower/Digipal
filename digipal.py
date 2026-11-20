@@ -133,6 +133,16 @@ BATTERY_LOW = 20                   # she gets hungry at this battery percent
 
 WELCOME_LINES = ["Welcome back!", "Welcome back! I missed you~", "You're back! Yay!"]
 STEAM_OPEN_LINES = ["Game time?", "Ooh, Steam! Game time?"]
+# the modes row (right-click > Modes): one round button each
+MODE_BUTTONS = [("\U0001F3AE\nGames", "gaming"), ("\U0001F37F\nMovie", "movie"),
+                ("\U0001F3A5\nStream", "stream"), ("\U0001F4E3\nCheer", "cheer"),
+                ("\U0001F319\nNone", "off"), ("\u2715", "close")]
+GAMING_START = ["Game time! \U0001F3AE I'll play over here~", "Ooh, let's play together! \U0001F3AE",
+                "Player 2 ready! \U0001F3AE"]
+GAMING_END = ["GG! That was fun! \U0001F3AE", "I almost beat that level!", "Good game~ \u2665"]
+GAMING_LINES = ["Ooh, I found a secret!", "Level up! \u2728", "Nooo, I fell in the lava!",
+                "Boss fight! \U0001F4AA", "One more round!", "I got a new high score!"]
+
 STEAM_CHEERS = ["Yay!", "This is so fun!", "Have fun!", "Ooh, good game!"]
 
 # ---- EDIT APP REACTIONS HERE ("App name": "what she says") ----
@@ -172,7 +182,7 @@ ACC_NAMES = {"auto": "Outfit: seasonal", "santa": "Santa hat!", "witch": "Witch 
 # drawn outfits are pinned to her head in every picture; these are the poses where a flat
 # drawing can sit right at all (not lying down asleep, not peeking around a window)
 ACC_DROP_OK = {"idle", "blink", "happy", "walk", "sing", "surprised", "sitfloor", "typing", "cuddle_teddy",
-               "cuddle_ball", "meditate", "sit", "shy", "scared", "shiver", "camera"}
+               "cuddle_ball", "meditate", "sit", "shy", "scared", "shiver", "camera", "gaming"}
 ACC_MENU = [("auto", "Seasonal (changes by month)"), ("santa", "Santa hat"),
             ("witch", "Witch hat"), ("party", "Party hat"), ("heart", "Heart clip"),
             ("ears", "Cat ears"), ("flower", "Flower"),
@@ -2662,7 +2672,7 @@ class BubbleWin(QWidget):
 class ChoiceBar(QWidget):
     """A row of little buttons under Digi for answering her (Yes / Later / No, how long...)."""
 
-    def __init__(self, pet, options, on_pick):
+    def __init__(self, pet, options, on_pick, active=None, big=False):
         super().__init__(None)
         self.pet = pet
         self.on_pick = on_pick
@@ -2677,10 +2687,20 @@ class ChoiceBar(QWidget):
             b = QPushButton(label)
             b.setCursor(Qt.PointingHandCursor)
             b.setFocusPolicy(Qt.NoFocus)
-            b.setStyleSheet("QPushButton { padding: 5px 12px; border-radius: 12px; font-size: 13px; "
-                            "font-weight: bold; color: #3a3159; background: white; "
-                            "border: 2px solid #a99be0; }"
-                            "QPushButton:hover { background: #efeaf9; }")
+            if big:                             # round mode buttons: an icon over a little name
+                on = key == active
+                b.setFixedSize(62, 58) if key != "close" else b.setFixedSize(30, 30)
+                b.setStyleSheet("QPushButton { border-radius: %dpx; font-size: 12px; font-weight: bold; "
+                                "color: %s; background: %s; border: 2px solid %s; }"
+                                "QPushButton:hover { background: %s; }"
+                                % (15 if key == "close" else 18, "white" if on else "#3a3159",
+                                   "#a99be0" if on else "white", "#6b5f93" if on else "#a99be0",
+                                   "#9586d6" if on else "#efeaf9"))
+            else:
+                b.setStyleSheet("QPushButton { padding: 5px 12px; border-radius: 12px; font-size: 13px; "
+                                "font-weight: bold; color: #3a3159; background: white; "
+                                "border: 2px solid #a99be0; }"
+                                "QPushButton:hover { background: #efeaf9; }")
             b.clicked.connect(lambda *a, k=key: self.pick(k))
             row.addWidget(b)
         self.adjustSize()
@@ -2952,6 +2972,8 @@ class Pet(QWidget):
         self.stream_enabled = True
         self.stream_manual = False
         self.movie = False              # movie mode: popcorn in the corner
+        self.gaming = False             # video game mode: she plays games in the corner too
+        self.gaming_cheer = 0
         self.obs_open = False
         self.streaming = False
         self.water = self.load_water()
@@ -3316,6 +3338,8 @@ class Pet(QWidget):
             want = [("meditate", 6), ("sitfloor", 6)]
         elif self.movie_settled():
             want = [("sitfloor", 5)]
+        elif self.gaming and self.corner_settled():
+            want = [("gaming", 4), ("sitfloor", 5)]
         elif self.floor_sit and not self.dragging:
             want = [("sitfloor", 5)]
         elif self.sitting and self.mode == "perch" and not self.dragging:
@@ -3672,11 +3696,10 @@ class Pet(QWidget):
                         lambda v: self.set_outfit_style("3d"))
         self.add_toggle(om, "Style: drawn (flat)", self.outfit_style == "drawn",
                         lambda v: self.set_outfit_style("drawn"))
-        self.add_toggle(menu, "Game mode", self.game_mode, self.set_game_mode)
-        self.add_toggle(menu, "Stream mode (sit quietly in the corner)",
-                        self.stream_manual, self.set_stream_manual)
-        self.add_toggle(menu, "Movie mode (popcorn in the corner) \U0001F37F",
-                        self.movie, self.set_movie)
+        names = {"gaming": "Video games", "movie": "Movie", "stream": "Stream", "cheer": "Cheer me on"}
+        now_mode = self.current_mode()
+        menu.addAction("Modes \U0001F3AE\U0001F37F\U0001F3A5" +
+                       ("  (now: %s)" % names[now_mode] if now_mode in names else ""), self.show_modes)
         menu.addAction("Steam status", self.show_steam_status)
         menu.addAction("Test reminder", lambda: self.remind("Time for dinner!"))
 
@@ -4021,10 +4044,13 @@ class Pet(QWidget):
     def update_stream(self):
         was = self.streaming
         self.obs_open = self.check_obs()
-        self.streaming = self.stream_manual or self.movie or (self.stream_enabled and self.obs_open)
+        self.streaming = (self.stream_manual or self.movie or self.gaming
+                          or (self.stream_enabled and self.obs_open))
         if self.streaming and not was:
             if self.movie:
                 self.say("Movie time! \U0001F37F I'll be quiet~", 3000)
+            elif self.gaming:
+                self.say(random.choice(GAMING_START), 3000)
             else:
                 self.say("Ooh, are we live? I'll sit quietly over here~", 3000)
             self.end_ball()
@@ -4050,6 +4076,69 @@ class Pet(QWidget):
             return
         self.update_stream()
 
+    def set_gaming(self, value):
+        was = self.gaming
+        self.gaming = value
+        if was and not value:
+            self.streaming = False
+            self.update_stream()
+            if not self.streaming:
+                self.say(random.choice(GAMING_END), 2500)
+                self.happy = 30
+            return
+        self.gaming_cheer = time.time() + random.uniform(120, 300)
+        self.update_stream()
+
+    # ----- modes: one row of round buttons to pick how she hangs out -----
+    def current_mode(self):
+        if self.gaming:
+            return "gaming"
+        if self.movie:
+            return "movie"
+        if self.stream_manual:
+            return "stream"
+        if self.game_mode:
+            return "cheer"
+        return "off"
+
+    def show_modes(self):
+        self.show_choices(MODE_BUTTONS, self.pick_mode, active=self.current_mode(), big=True)
+
+    def pick_mode(self, key):
+        if key == "close" or key == self.current_mode():
+            return
+        # only one mode at a time: switch the others off first (quietly)
+        if self.gaming and key != "gaming":
+            self.gaming = False
+        if self.movie and key != "movie":
+            self.movie = False
+        if self.stream_manual and key != "stream":
+            self.stream_manual = False
+        if self.game_mode and key != "cheer":
+            self.set_game_mode(False)
+        if key == "gaming":
+            self.set_gaming(True)
+        elif key == "movie":
+            self.set_movie(True)
+        elif key == "stream":
+            self.set_stream_manual(True)
+        elif key == "cheer":
+            self.set_game_mode(True)
+            self.update_stream()
+            self.say("I'll cheer you on while you play! \U0001F4E3", 3000)
+        else:
+            self.update_stream()
+            if not self.streaming:
+                self.say("Back to hanging out~", 2200)
+
+    def corner_settled(self):
+        """She's made it to her corner spot (movie or video game mode)."""
+        if not (self.movie or self.gaming) or self.dragging:
+            return False
+        tx = self.area.right() - 200
+        ty = self.area.bottom() - 230
+        return abs(self.px - tx) <= 3 and abs(self.py - ty) <= 3
+
     def movie_settled(self):
         """She's made it to her movie spot."""
         if not self.movie or self.dragging:
@@ -4057,6 +4146,30 @@ class Pet(QWidget):
         tx = self.area.right() - 200
         ty = self.area.bottom() - 230
         return abs(self.px - tx) <= 3 and abs(self.py - ty) <= 3
+
+    def draw_gamepad(self, p):
+        """A little lilac controller on her lap, its buttons lighting up as she plays."""
+        x0, y0 = 88, 200
+        p.save()
+        p.setPen(QPen(QColor("#4b3f7a"), 1.4))
+        p.setBrush(QBrush(QColor("#c9bdf0")))
+        p.drawEllipse(QRectF(x0 - 4, y0 + 2, 16, 18))          # grips
+        p.drawEllipse(QRectF(x0 + 32, y0 + 2, 16, 18))
+        p.drawRoundedRect(QRectF(x0, y0, 44, 16), 7, 7)       # body
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(QColor("#4b3f7a")))
+        p.drawRect(QRectF(x0 + 6, y0 + 7, 9, 3))              # d-pad
+        p.drawRect(QRectF(x0 + 9, y0 + 4, 3, 9))
+        cols = ("#f7a8c8", "#8fdcc3", "#ffd970", "#8cc8f2")
+        lit = (self.t // 3) % 4
+        for k, (dx, dy) in enumerate(((36, 5), (40, 9), (32, 9), (36, 13))):
+            c = QColor(cols[k])
+            if k == lit:
+                c = c.lighter(135)
+            p.setBrush(QBrush(c))
+            r = 2.6 if k == lit else 2.2
+            p.drawEllipse(QPointF(x0 + dx, y0 + dy - 1), r, r)
+        p.restore()
 
     def draw_popcorn(self, p):
         """A striped popcorn bucket on her lap, and a piece flying up to her mouth now and then."""
@@ -5733,7 +5846,7 @@ class Pet(QWidget):
         self.med_mid_done = False
         QTimer.singleShot(1200, lambda: self.play_chime("start") if self.med_end else None)
 
-    def show_choices(self, options, on_pick):
+    def show_choices(self, options, on_pick, active=None, big=False):
         if self.choice_bar is not None:
             try:
                 self.choice_bar.hide()
@@ -5743,7 +5856,7 @@ class Pet(QWidget):
         def picked(key):
             self.choice_bar = None
             on_pick(key)
-        self.choice_bar = ChoiceBar(self, options, picked)
+        self.choice_bar = ChoiceBar(self, options, picked, active, big)
 
     def close_choices(self):
         if self.choice_bar is not None:
@@ -6267,6 +6380,11 @@ class Pet(QWidget):
             time.sleep(5)
 
     def check_steam(self):
+        # video game mode: now and then she tells you how her own game is going
+        if (self.gaming and self.corner_settled() and time.time() > self.gaming_cheer
+                and not self.msg and not self.reminder_active):
+            self.say(random.choice(GAMING_LINES), 2800)
+            self.gaming_cheer = time.time() + random.uniform(240, 480)
         steam = self.steam_running
         game = self.steam_game or self.game_mode
         if self.prev_steam is None:
@@ -7396,6 +7514,9 @@ class Pet(QWidget):
             self.draw_pout(p, b)
         if self.frames and self.movie_settled() and not self.bed:
             self.draw_popcorn(p)
+        if (self.frames and self.gaming and self.corner_settled() and not self.bed
+                and "gaming" not in self.frames):
+            self.draw_gamepad(p)                  # (until her 3D gaming frames are in)
         self.draw_fun_effects(p, b)
         if self.bed == "dock":
             self.draw_battery(p)
