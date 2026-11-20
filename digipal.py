@@ -20,7 +20,8 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QInputDialog,
                                QTimeEdit, QCheckBox, QMessageBox, QGridLayout,
                                QColorDialog, QButtonGroup, QRadioButton, QFrame, QTabWidget,
                                QScrollArea, QComboBox, QSpinBox, QLayout, QStackedWidget,
-                               QGraphicsView, QGraphicsScene, QSlider, QCalendarWidget)
+                               QGraphicsView, QGraphicsScene, QSlider, QCalendarWidget,
+                               QPlainTextEdit)
 from PySide6.QtCore import QTime, QRect, QSize, QPoint, QUrl, QDate
 
 IS_WIN = sys.platform == "win32"
@@ -245,12 +246,13 @@ IDLE_LINES = ["...", "Keep going!", "I'm here!", "Snack time?", "Stretch your sh
 SING_LINES = ["la la la~", "lalala~", "la la~ la la~", "~la la la~", "lala~"]
 
 ACC_MODES = ["auto", "santa", "witch", "party", "heart", "ears", "flower", "scarf",
-             "sunhat", "beret", "bunny", "glasses", "bow", "star", "none"]
+             "sunhat", "beret", "bunny", "glasses", "bow", "star", "book", "sword", "none"]
 ACC_NAMES = {"auto": "Outfit: seasonal", "santa": "Santa hat!", "witch": "Witch hat! \U0001F383",
              "party": "Party hat! \U0001F389", "heart": "Heart clip! \u2665",
              "ears": "Cat ears! Nya~", "flower": "A little flower!", "scarf": "Cozy scarf!",
              "sunhat": "Sun hat! \u2600", "beret": "A cozy beret~ \U0001F342", "bunny": "Bunny ears! Hop hop~",
              "glasses": "Ooh, smart glasses!", "bow": "A big bow! \U0001F380", "star": "A little star! \u2B50",
+             "book": "My dragon book! \U0001F409", "sword": "En garde! \u2694\ufe0f",
              "none": "No outfit"}
 # drawn outfits are pinned to her head in every picture; these are the poses where a flat
 # drawing can sit right at all (not lying down asleep, not peeking around a window)
@@ -260,7 +262,12 @@ ACC_MENU = [("auto", "Seasonal (changes by month)"), ("santa", "Santa hat"),
             ("witch", "Witch hat"), ("party", "Party hat"), ("heart", "Heart clip"),
             ("ears", "Cat ears"), ("flower", "Flower"),
             ("scarf", "Scarf"), ("sunhat", "Sun hat"), ("beret", "Beret"), ("bunny", "Bunny ears"),
-            ("glasses", "Glasses"), ("bow", "Big bow"), ("star", "Star clip"), ("none", "Nothing")]
+            ("glasses", "Glasses"), ("bow", "Big bow"), ("star", "Star clip"),
+            ("book", "Dragon book"), ("sword", "Sword"), ("none", "Nothing")]
+# things she holds in her hand instead of wearing on her head: hidden while her hands are busy
+HAND_ACCS = ("book", "sword")
+HAND_BUSY = ("typing", "camera", "gaming", "cuddle_", "meditate", "stretch", "shy", "shiver",
+             "umbrella", "peek", "sleep_")
 
 SPEED = 2.0
 PAUSE_CHANCE = 0.004
@@ -296,6 +303,76 @@ SIT_OFFSET = 187        # how far above the window edge she sits
 KICK_LINES = ["Got it!", "Kick!", "Hehe!", "Again!", "Mine!", "Boing!"]
 DRINK_LINES = ["Glug glug!", "Hydrated!", "Good job!", "Sip sip~", "Yay, water!"]
 DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+# ---- D&D ----
+# each game: {"title", "role": "dm"/"player", "char": what she calls you at the table,
+#             "days": ["Fri", ...], "start": "19:00", "hours": 4, "notes": "..."}
+DND_HEADS_UP = 30                # minutes before a game she gives you a heads-up
+DND_START_LINES = ["It's D&D time, {name}! Grab your dice~ \U0001F3B2",
+                   "Game time, {name}! May your rolls be high \u2728",
+                   "Adventure awaits, {name}! \U0001F409"]
+DND_DM_LINES = ["Your players await, {name}! \U0001F4D6", "Time to run the game, {name}! You've got this~",
+                "The world is yours to tell, {name}! \U0001F409"]
+DND_END_LINES = ["Great session, {name}! Anything to jot in your notes? \U0001F4DC",
+                 "That was fun! Rest up, {name}~", "What an adventure! Same time next week? \U0001F3B2"]
+
+
+def clean_dnd_game(g):
+    """A saved game, checked over (or None if it's not usable)."""
+    if not isinstance(g, dict):
+        return None
+    start = str(g.get("start", "19:00"))
+    if not re.fullmatch(r"\d\d:\d\d", start) or int(start[:2]) > 23 or int(start[3:]) > 59:
+        start = "19:00"
+    try:
+        hours = max(0.5, min(12.0, float(g.get("hours", 4))))
+    except (TypeError, ValueError):
+        hours = 4.0
+    return {"title": str(g.get("title", "")).strip()[:40] or "D&D",
+            "role": "dm" if g.get("role") == "dm" else "player",
+            "char": str(g.get("char", "")).strip()[:24],
+            "days": [d for d in DAY_ORDER if d in (g.get("days") or [])],
+            "start": start, "hours": hours,
+            "notes": str(g.get("notes", ""))[:20000]}
+
+
+def dnd_starts(game, around):
+    """When this game starts on the days near `around` (yesterday through a week ahead)."""
+    h, m = int(game["start"][:2]), int(game["start"][3:])
+    out = []
+    for off in range(-1, 8):
+        d = around.date() + timedelta(days=off)
+        if DAY_ORDER[d.weekday()] in game["days"]:
+            out.append(datetime(d.year, d.month, d.day, h, m))
+    return out
+
+
+def dnd_session_at(games, now):
+    """(game, start, end) of the game going on right now, or None."""
+    for g in games:
+        for st in dnd_starts(g, now):
+            end = st + timedelta(hours=g["hours"])
+            if st <= now < end:
+                return g, st, end
+    return None
+
+
+def dnd_next_game(games, now):
+    """(game, start) of the next game that hasn't started yet, or None."""
+    best = None
+    for g in games:
+        for st in dnd_starts(g, now):
+            if st > now and (best is None or st < best[1]):
+                best = (g, st)
+    return best
+
+
+def dnd_game_label(g):
+    days = ", ".join(g["days"]) or "no days yet"
+    t = datetime.strptime(g["start"], "%H:%M").strftime("%I:%M %p").lstrip("0")
+    role = "DM \U0001F4D6" if g["role"] == "dm" else "Player \u2694\ufe0f"
+    who = f" as {g['char']}" if g["char"] else ""
+    return f"{g['title']}: {days} at {t} \u00b7 {role}{who}"
 
 # ---- MEDITATION ----
 MED_CHOICES = (5, 10, 15, 20, 30)        # minutes
@@ -1383,6 +1460,11 @@ class CustomizeDialog(QDialog):
         lists_scroll.setFrameShape(QFrame.NoFrame)
         lists_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         lists_scroll.setWidget(self.build_lists())
+        dnd_scroll = QScrollArea()               # the D&D tab: games, initiative, notes
+        dnd_scroll.setWidgetResizable(True)
+        dnd_scroll.setFrameShape(QFrame.NoFrame)
+        dnd_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        dnd_scroll.setWidget(self.build_dnd())
         # live preview of her
         self.preview = QLabel()
         self.preview.setAlignment(Qt.AlignCenter)
@@ -1391,7 +1473,7 @@ class CustomizeDialog(QDialog):
             self.preview.setParent(self)
             self.preview.setStyleSheet("background: transparent;")
             self.preview.setAttribute(Qt.WA_TransparentForMouseEvents)
-            for sc in (look_scroll, personal_scroll, med_scroll, lists_scroll):
+            for sc in (look_scroll, personal_scroll, med_scroll, lists_scroll, dnd_scroll):
                 sc.setStyleSheet("QScrollArea { background: white; border: none; } "
                                  "QScrollArea > QWidget > QWidget { background: white; }")
             self.phone = QWidget(None if ROOM_TILT else self)
@@ -1423,11 +1505,12 @@ class CustomizeDialog(QDialog):
             self.pages.addWidget(personal_scroll)
             self.pages.addWidget(med_scroll)
             self.pages.addWidget(lists_scroll)
+            self.pages.addWidget(dnd_scroll)
             pl.addWidget(self.pages, 1)
             dock = QHBoxLayout()
             dock.setSpacing(4)
             self.dock_buttons = []
-            for i, label in enumerate(("Look", "Me", "Calm", "Lists")):
+            for i, label in enumerate(("Look", "Me", "Calm", "Lists", "D&&D")):
                 b = QPushButton(label)
                 b.setCheckable(True)
                 b.setProperty("class", "dock")
@@ -1445,7 +1528,7 @@ class CustomizeDialog(QDialog):
             col = QVBoxLayout(look)
             col.setContentsMargins(2, 2, 6, 2)
         else:
-            for sc in (look_scroll, personal_scroll, med_scroll, lists_scroll):
+            for sc in (look_scroll, personal_scroll, med_scroll, lists_scroll, dnd_scroll):
                 sc.setStyleSheet("QScrollArea { background: transparent; } "
                                  "QScrollArea > QWidget > QWidget { background: #f6f3fb; }")
             main = QVBoxLayout(self)
@@ -1459,6 +1542,8 @@ class CustomizeDialog(QDialog):
             tabs.addTab(personal_scroll, "Personal settings")
             tabs.addTab(med_scroll, "Meditation")
             tabs.addTab(lists_scroll, "Lists")
+            tabs.addTab(dnd_scroll, "D&&D")
+            tabs.currentChanged.connect(lambda i: self.refresh_dnd() if i == 4 else None)
             self.tabs = tabs
             outer = QHBoxLayout(look)
             self.preview.setFixedSize(220, 260)
@@ -1913,17 +1998,276 @@ class CustomizeDialog(QDialog):
             self.pet.save_cycle()
         self.refresh_lists()
 
+    # ---------- the D&D tab: your games, initiative and session notes ----------
+    def build_dnd(self):
+        w = QWidget()
+        col = QVBoxLayout(w)
+        col.setContentsMargins(2, 2, 6, 2)
+        pet = self.pet
+        self.dnd_status = QLabel()
+        self.dnd_status.setWordWrap(True)
+        self.dnd_status.setStyleSheet("background: #efeaf9; color: #4b3f7a; border-radius: 10px; "
+                                      "padding: 5px 9px; font-size: 12px;")
+        col.addWidget(self.dnd_status)
+
+        # games
+        col.addWidget(self.heading("My games \U0001F409"))
+        self.dnd_list = self.list_box(4)
+        self.dnd_list.setWordWrap(True)
+        self.dnd_list.itemDoubleClicked.connect(lambda *_: self.dnd_edit())
+        col.addWidget(self.dnd_list)
+        col.addLayout(self.small_buttons([("Add", self.dnd_add), ("Change", self.dnd_edit),
+                                          ("Delete", self.dnd_delete)]))
+        self.dnd_use_name = QCheckBox("During games, call me by my table name")
+        self.dnd_use_name.toggled.connect(lambda v: self.dnd_opt("use_name", v))
+        col.addWidget(self.dnd_use_name)
+        self.dnd_dress = QCheckBox("Dress up for games (DM: book, player: sword)")
+        self.dnd_dress.toggled.connect(lambda v: self.dnd_opt("dress", v))
+        col.addWidget(self.dnd_dress)
+
+        # initiative
+        col.addWidget(self.heading("Initiative \u2694\ufe0f"))
+        self.init_round = QLabel()
+        self.init_round.setStyleSheet("color: #6b5f93; font-size: 11px;")
+        col.addWidget(self.init_round)
+        self.init_list = self.list_box(5)
+        col.addWidget(self.init_list)
+        irow = QHBoxLayout()
+        self.init_name = QLineEdit()
+        self.init_name.setPlaceholderText("Who? (Goblin 1, Rainy...)")
+        self.init_name.setMaxLength(24)
+        self.init_name.returnPressed.connect(lambda: self.init_add())
+        irow.addWidget(self.init_name, 1)
+        self.init_roll = QSpinBox()
+        self.init_roll.setRange(-5, 40)
+        self.init_roll.setValue(10)
+        self.init_roll.setToolTip("Their initiative roll")
+        irow.addWidget(self.init_roll)
+        col.addLayout(irow)
+        col.addLayout(self.small_buttons([("Add", lambda *a: self.init_add()),
+                                          ("\U0001F3B2 Roll d20", self.init_d20)]))
+        col.addLayout(self.small_buttons([("Next turn \u25B6", self.init_next),
+                                          ("Remove", self.init_remove),
+                                          ("Clear all", self.init_clear)]))
+
+        # notes
+        col.addWidget(self.heading("Session notes \U0001F4DC"))
+        self.notes_game = QComboBox()
+        self.notes_game.currentIndexChanged.connect(self.notes_show)
+        col.addWidget(self.notes_game)
+        self.notes_box = QPlainTextEdit()
+        self.notes_box.setPlaceholderText("NPC names, loot, what happened last time...")
+        self.notes_box.setStyleSheet("QPlainTextEdit { border: 1px solid #ddd5ef; border-radius: 8px; "
+                                     "background: white; color: #3a3159; }")
+        self.notes_box.setMinimumHeight(140)
+        self.notes_box.textChanged.connect(self.notes_changed)
+        col.addWidget(self.notes_box)
+        self.notes_timer = QTimer(self)
+        self.notes_timer.setSingleShot(True)
+        self.notes_timer.setInterval(1200)
+        self.notes_timer.timeout.connect(self.pet.save_custom)
+        note = QLabel("Your games and notes stay only on this computer.")
+        note.setStyleSheet("color: #6b5f93; font-size: 11px;")
+        col.addWidget(note)
+        col.addStretch(1)
+        return w
+
+    def refresh_dnd(self):
+        pet = self.pet
+        if not hasattr(self, "dnd_list"):
+            return
+        now = datetime.now()
+        cur = dnd_session_at(pet.dnd_games, now)
+        nxt = dnd_next_game(pet.dnd_games, now)
+        if cur:
+            g, st, end = cur
+            who = pet.call_name()
+            self.dnd_status.setText(f"\U0001F3B2 {g['title']} is on now, until "
+                                    f"{end.strftime('%I:%M %p').lstrip('0')}!"
+                                    + (f" Digi calls you {who}." if who else ""))
+        elif nxt:
+            g, st = nxt
+            day = ("today" if st.date() == now.date() else
+                   "tomorrow" if st.date() == now.date() + timedelta(days=1) else st.strftime("%A"))
+            self.dnd_status.setText(f"Next game: {g['title']}, {day} at {st.strftime('%I:%M %p').lstrip('0')}")
+        else:
+            self.dnd_status.setText("Add your D&D games and Digi will cheer you on at game time! \U0001F409")
+        self.dnd_list.clear()
+        for g in pet.dnd_games:
+            self.dnd_list.addItem(dnd_game_label(g))
+        if not pet.dnd_games:
+            it = QListWidgetItem("(no games yet!)")
+            it.setFlags(Qt.NoItemFlags)
+            self.dnd_list.addItem(it)
+        for box, key in ((self.dnd_use_name, "use_name"), (self.dnd_dress, "dress")):
+            box.blockSignals(True)
+            box.setChecked(pet.dnd_opts.get(key, True))
+            box.blockSignals(False)
+        self.refresh_init()
+        # notes: one page per game
+        keep = self.notes_game.currentIndex()
+        self.notes_game.blockSignals(True)
+        self.notes_game.clear()
+        for g in pet.dnd_games:
+            self.notes_game.addItem(g["title"])
+        if cur and cur[0] in pet.dnd_games and keep < 0:
+            keep = pet.dnd_games.index(cur[0])
+        self.notes_game.setCurrentIndex(min(max(keep, 0), len(pet.dnd_games) - 1)
+                                        if pet.dnd_games else -1)
+        self.notes_game.blockSignals(False)
+        self.notes_game.setEnabled(bool(pet.dnd_games))
+        self.notes_show()
+
+    def refresh_init(self):
+        ini = self.pet.dnd_init
+        self.init_list.clear()
+        for i, (name, roll) in enumerate(ini["order"]):
+            mark = "\u25B6 " if i == ini["turn"] else "    "
+            it = QListWidgetItem(f"{mark}{roll:>2}   {name}")
+            if i == ini["turn"]:
+                f = it.font()
+                f.setBold(True)
+                it.setFont(f)
+            self.init_list.addItem(it)
+        if not ini["order"]:
+            it = QListWidgetItem("(roll for initiative!)")
+            it.setFlags(Qt.NoItemFlags)
+            self.init_list.addItem(it)
+            self.init_round.setText("Add everyone with their roll; Digi keeps them in order.")
+        else:
+            self.init_round.setText(f"Round {ini['round']} \u00b7 {self.pet.dnd_turn_name()}'s turn")
+
+    def dnd_opt(self, key, value):
+        self.pet.dnd_opts[key] = bool(value)
+        self.pet.dnd_changed()
+        self.refresh_dnd()
+
+    def dnd_add(self):
+        dlg = DndGameEdit(self)
+        if dlg.exec():
+            g = dlg.result_item()
+            self.pet.dnd_games.append(g)
+            self.pet.dnd_changed()
+            if not g["days"]:
+                self.pet.say("Saved! Tick its game days so I know when to cheer you on~", 3500)
+            elif g["role"] == "dm":
+                self.pet.say(f"A DM! I'll bring my dragon book for {g['title']} \U0001F4D6", 3500)
+            else:
+                self.pet.say(f"I'll bring my sword for {g['title']}! \u2694\ufe0f", 3500)
+            self.refresh_dnd()
+
+    def dnd_edit(self):
+        i = self.dnd_list.currentRow()
+        if i < 0 or i >= len(self.pet.dnd_games):
+            return
+        dlg = DndGameEdit(self, self.pet.dnd_games[i])
+        if dlg.exec():
+            self.pet.dnd_games[i] = dlg.result_item()
+            self.pet.dnd_changed()
+            self.refresh_dnd()
+
+    def dnd_delete(self):
+        i = self.dnd_list.currentRow()
+        if i < 0 or i >= len(self.pet.dnd_games):
+            return
+        g = self.pet.dnd_games[i]
+        extra = "\n\nIts session notes will be deleted too." if g["notes"].strip() else ""
+        if QMessageBox.question(self, "Delete game",
+                                "Delete this game?\n\n" + dnd_game_label(g) + extra) == QMessageBox.Yes:
+            del self.pet.dnd_games[i]
+            self.pet.dnd_changed()
+            self.refresh_dnd()
+
+    def init_add(self, roll=None):
+        name = self.init_name.text().strip()
+        if not name:
+            self.init_name.setFocus()
+            return
+        if roll is None:
+            roll = self.init_roll.value()
+        ini = self.pet.dnd_init
+        o = ini["order"]
+        cur = o[ini["turn"] % len(o)] if o else None
+        o.append([name[:24], roll])
+        o.sort(key=lambda e: -e[1])                      # highest goes first (ties: whoever was first)
+        if cur is not None:                              # keep the turn on whoever had it
+            ini["turn"] = next(i for i, e in enumerate(o) if e is cur)
+        self.init_name.clear()
+        self.init_roll.setValue(10)
+        self.pet.save_custom()
+        self.refresh_init()
+
+    def init_d20(self):
+        name = self.init_name.text().strip()
+        if not name:
+            self.pet.say("Who am I rolling for? Type a name first~", 2500)
+            self.init_name.setFocus()
+            return
+        r = random.randint(1, 20)
+        self.pet.say(f"{name} rolled a {r}!" + (" \u2728 Natural 20!" if r == 20 else
+                                                " Oof, a 1~" if r == 1 else ""), 2500)
+        self.init_add(r)
+
+    def init_next(self):
+        self.pet.dnd_next_turn()
+        self.refresh_init()
+
+    def init_remove(self):
+        i = self.init_list.currentRow()
+        ini = self.pet.dnd_init
+        if i < 0 or i >= len(ini["order"]):
+            return
+        del ini["order"][i]
+        if i < ini["turn"]:
+            ini["turn"] -= 1
+        if ini["turn"] >= len(ini["order"]):
+            ini["turn"] = 0
+        self.pet.save_custom()
+        self.refresh_init()
+
+    def init_clear(self):
+        if not self.pet.dnd_init["order"]:
+            return
+        if QMessageBox.question(self, "Clear initiative",
+                                "Clear everyone from initiative? (Combat's over!)") == QMessageBox.Yes:
+            self.pet.dnd_init = {"order": [], "turn": 0, "round": 1}
+            self.pet.save_custom()
+            self.refresh_init()
+
+    def notes_show(self, *a):
+        i = self.notes_game.currentIndex()
+        games = self.pet.dnd_games
+        self.notes_box.blockSignals(True)
+        if 0 <= i < len(games):
+            self.notes_box.setEnabled(True)
+            if self.notes_box.toPlainText() != games[i]["notes"]:
+                self.notes_box.setPlainText(games[i]["notes"])
+        else:
+            self.notes_box.setPlainText("")
+            self.notes_box.setEnabled(False)
+        self.notes_box.blockSignals(False)
+        self.notes_box.setPlaceholderText("NPC names, loot, what happened last time..." if games
+                                          else "Add a game first, then your notes go here~")
+
+    def notes_changed(self):
+        i = self.notes_game.currentIndex()
+        if 0 <= i < len(self.pet.dnd_games):
+            self.pet.dnd_games[i]["notes"] = self.notes_box.toPlainText()[:20000]
+            self.notes_timer.start()
+
     def show_page(self, i):
         if not self.in_room:
             if hasattr(self, "tabs"):
                 self.tabs.setCurrentIndex(i)
             return
         self.pages.setCurrentIndex(i)
-        self.phone_title.setText(("Customize Digi", "About you", "Meditation", "My lists")[i])
+        self.phone_title.setText(("Customize Digi", "About you", "Meditation", "My lists", "D&D")[i])
         for j, b in enumerate(self.dock_buttons):
             b.setChecked(i == j)
         if i == 3:
             self.refresh_lists()
+        if i == 4:
+            self.refresh_dnd()
 
     def hrow(self):
         return FlowLayout() if self.in_room else QHBoxLayout()
@@ -2256,19 +2600,9 @@ class CustomizeDialog(QDialog):
         self.sleep_from.timeChanged.connect(lambda *a: self.pick_sleep())
         self.sleep_to.timeChanged.connect(lambda *a: self.pick_sleep())
 
-        col.addWidget(self.heading("Game nights (D&D)"))
-        lab = QLabel("From 7pm on these days she plays D&D with you, and counts down to the next one.")
-        lab.setWordWrap(True)
+        lab = QLabel("\U0001F409 Game nights moved to the D&D tab!")
+        lab.setStyleSheet("color: #6b5f93; font-size: 11px;")
         col.addWidget(lab)
-        row = self.hrow()
-        self.day_buttons = {}
-        for d in DAY_ORDER:
-            b = self.option(d)
-            b.clicked.connect(lambda *a, k=d: self.pick_day(k))
-            self.day_buttons[d] = b
-            row.addWidget(b)
-        row.addStretch(1)
-        col.addLayout(row)
         col.addStretch(1)
         return w
 
@@ -2323,16 +2657,6 @@ class CustomizeDialog(QDialog):
         self.pet.save_custom()
         self.refresh()
 
-    def pick_day(self, d):
-        days = self.pet.dnd_days
-        if d in days:
-            days.remove(d)
-        else:
-            days.append(d)
-        self.pet.dnd_days = [x for x in DAY_ORDER if x in days]
-        self.pet.save_custom()
-        self.refresh()
-
     def pick_med_time(self):
         on = self.med_on.isChecked()
         self.med_at.setEnabled(on)
@@ -2365,6 +2689,7 @@ class CustomizeDialog(QDialog):
     def refresh(self):
         pet = self.pet
         self.refresh_lists()
+        self.refresh_dnd()
         for k, b in self.style_hair_buttons.items():
             b.setChecked(k == pet.hairstyle)
         for k, b in self.bubble_buttons.items():
@@ -2391,8 +2716,6 @@ class CustomizeDialog(QDialog):
             b.setChecked(k == pet.outline)
         for k, b in self.unit_buttons.items():
             b.setChecked(k == pet.units)
-        for k, b in self.day_buttons.items():
-            b.setChecked(k in pet.dnd_days)
         self.place_label.setText("Weather for: " + (pet.place["name"] if pet.place else "(no city yet)"))
         self.sleep_from.setEnabled(bool(pet.sleep_hours_set))
         self.sleep_to.setEnabled(bool(pet.sleep_hours_set))
@@ -2540,6 +2863,89 @@ class ReminderEdit(QDialog):
         if not days or len(days) == 7:
             return (when, text)
         return (when, text, days)
+
+
+class DndGameEdit(QDialog):
+    """Add or change one D&D game: its name, days, time, and whether you're the DM or a player."""
+
+    def __init__(self, parent, game=None):
+        super().__init__(parent)
+        self.setWindowTitle("D&D game")
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        game = game or {"title": "", "role": "player", "char": "", "days": [], "start": "19:00",
+                        "hours": 4, "notes": ""}
+        self.notes = game.get("notes", "")
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("Name of the game"))
+        self.title = QLineEdit(game["title"])
+        self.title.setPlaceholderText("Curse of Strahd, Friday group...")
+        self.title.setMaxLength(40)
+        lay.addWidget(self.title)
+        lay.addWidget(QLabel("You are the..."))
+        rrow = QHBoxLayout()
+        self.dm = QRadioButton("DM \U0001F4D6 (Digi brings her dragon book)")
+        self.player = QRadioButton("Player \u2694\ufe0f (Digi brings her sword)")
+        (self.dm if game["role"] == "dm" else self.player).setChecked(True)
+        rl = QVBoxLayout()
+        rl.addWidget(self.dm)
+        rl.addWidget(self.player)
+        rrow.addLayout(rl)
+        lay.addLayout(rrow)
+        self.char_label = QLabel()
+        lay.addWidget(self.char_label)
+        self.char = QLineEdit(game["char"])
+        self.char.setMaxLength(24)
+        lay.addWidget(self.char)
+        self.dm.toggled.connect(self.role_changed)
+        self.role_changed()
+        lay.addWidget(QLabel("Game days (tick every day you play)"))
+        drow = QHBoxLayout()
+        self.days = {}
+        for d in DAY_ORDER:
+            c = QCheckBox(d)
+            c.setChecked(d in game["days"])
+            self.days[d] = c
+            drow.addWidget(c)
+        drow.addStretch(1)
+        lay.addLayout(drow)
+        trow = QHBoxLayout()
+        trow.addWidget(QLabel("Starts at"))
+        self.start = QTimeEdit(QTime.fromString(game["start"], "HH:mm"))
+        self.start.setDisplayFormat("h:mm AP")
+        trow.addWidget(self.start)
+        trow.addWidget(QLabel("for"))
+        self.hours = QSpinBox()
+        self.hours.setRange(1, 12)
+        self.hours.setValue(int(round(game["hours"])))
+        trow.addWidget(self.hours)
+        trow.addWidget(QLabel("hours"))
+        trow.addStretch(1)
+        lay.addLayout(trow)
+        btns = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        ok = QPushButton("Save")
+        ok.setDefault(True)
+        cancel.clicked.connect(self.reject)
+        ok.clicked.connect(self.accept)
+        btns.addWidget(cancel)
+        btns.addWidget(ok)
+        lay.addLayout(btns)
+
+    def role_changed(self, *a):
+        if self.dm.isChecked():
+            self.char_label.setText("What should Digi call you at the table? (optional)")
+            self.char.setPlaceholderText("Leave empty and she'll call you Dungeon Master")
+        else:
+            self.char_label.setText("Your character's name (Digi calls you this during the game)")
+            self.char.setPlaceholderText("Rainy, Thorin, Lady Moonwhisper...")
+
+    def result_item(self):
+        return clean_dnd_game({"title": self.title.text().strip() or "D&D",
+                               "role": "dm" if self.dm.isChecked() else "player",
+                               "char": self.char.text().strip(),
+                               "days": [d for d, c in self.days.items() if c.isChecked()],
+                               "start": self.start.time().toString("HH:mm"),
+                               "hours": self.hours.value(), "notes": self.notes})
 
 
 class BirthdayEdit(QDialog):
@@ -3244,7 +3650,12 @@ class Pet(QWidget):
         self.intro_talking = False
         self.place = None                 # {"name", "lat", "lon"} for the weather
         self.units = "F"
-        self.dnd_days = list(DND_DAYS)
+        self.dnd_days = list(DND_DAYS)    # every day with a game (kept in step with dnd_games)
+        self.dnd_games = []               # your D&D games (Customize -> D&D)
+        self.dnd_opts = {"use_name": True, "dress": True}
+        self.dnd_init = {"order": [], "turn": 0, "round": 1}   # initiative: [[name, roll], ...]
+        self.dnd_said = set()             # heads-ups already given
+        self.dnd_cache = (0.0, None)
         self.birthdays = []               # [{"name", "month", "day"}] she reminds you of
         self.my_birthday = None           # {"month", "day"}: she celebrates you!
         self.med_end = None               # meditation: when it ends
@@ -3632,7 +4043,7 @@ class Pet(QWidget):
         now = datetime.now()
         h, wd = now.hour, now.weekday()
         # ", name" when you've told her what to call you (Customize -> "Call me")
-        nm = (", " + self.nickname) if getattr(self, "nickname", "") else ""
+        nm = (", " + self.call_name()) if self.call_name() else ""
         if 5 <= h < 12:
             lines = [f"Good morning{nm}! \u2600\ufe0f", "Morning~ Did you have breakfast?",
                      "Rise and shine! Let's have a good day!"]
@@ -4208,6 +4619,10 @@ class Pet(QWidget):
         dm.addSeparator()
         dm.addAction("Advantage (2d20)", lambda *a: self.roll_dice(20, 2))
         dm.addAction("Custom roll... (like 5d20+3)", self.custom_roll)
+        ddm = pm.addMenu("\U0001F409 D&D")
+        if self.dnd_init["order"]:
+            ddm.addAction(f"Next turn (now: {self.dnd_turn_name()})", self.dnd_next_turn)
+        ddm.addAction("My games, notes and initiative...", lambda *a: self.open_customize(4))
 
         om = menu.addMenu("\U0001F457 Outfit")
         for key, label in ACC_MENU:
@@ -4241,7 +4656,7 @@ class Pet(QWidget):
 
         fm = sm.addMenu("Fun stuff she does on her own")
         for key, label in [("bubbles", "Blowing bubbles"), ("crystal", "Crystal ball"),
-                           ("teleport", "Teleporting"), ("dnd_solo", "D&D solo play (%s from 7pm)" % (" & ".join(self.dnd_days) or "pick your game nights")),
+                           ("teleport", "Teleporting"), ("dnd_solo", "D&D solo play (during game time)"),
                            ("cursor", "Playing with the cursor"), ("flowers", "Picking flowers"),
                            ("cuddle", "Night cuddles"), ("typing", "Typing along with you"),
                            ("camera", "Camera when you take a screenshot"),
@@ -5071,7 +5486,8 @@ class Pet(QWidget):
                 choices.append(key)
         if self.fun["teleport"]:
             choices.append("teleport")
-        if self.fun["dnd_solo"] and now.strftime("%a") in self.dnd_days and h >= 19:
+        if self.fun["dnd_solo"] and (self.dnd_now() if self.dnd_games
+                                     else (now.strftime("%a") in self.dnd_days and h >= 19)):
             choices += ["dnd"] * 5                   # D&D night: mostly this!
         if self.fun["cuddle"] and (h >= 21 or h < 0.5):
             choices += ["cuddle"] * 3
@@ -6185,7 +6601,9 @@ class Pet(QWidget):
                            "bubble_shape": self.bubble_shape, "bubble_pos": self.bubble_pos, "nickname": self.nickname,
                            "text_size": self.text_size, "outline": self.outline,
                            "glow_told": self.glow_told, "place": self.place, "units": self.units,
-                           "dnd_days": self.dnd_days, "sleep_hours": self.sleep_hours_set,
+                           "dnd_days": self.dnd_days, "dnd_games": self.dnd_games,
+                           "dnd_opts": self.dnd_opts, "dnd_init": self.dnd_init,
+                           "sleep_hours": self.sleep_hours_set,
                            "birthdays": self.birthdays, "my_birthday": self.my_birthday,
                            "med_days": self.med_days[-400:], "med_total": self.med_total,
                            "med_guide": self.med_guide, "med_time": self.med_time,
@@ -6209,6 +6627,24 @@ class Pet(QWidget):
             self.units = d["units"]
         if isinstance(d.get("dnd_days"), list):
             self.dnd_days = [x for x in d["dnd_days"] if x in DAY_ORDER]
+        if isinstance(d.get("dnd_games"), list):
+            self.dnd_games = [g for g in (clean_dnd_game(x) for x in d["dnd_games"]) if g]
+        elif self.dnd_days and not self.dnd_games:
+            # game nights from before the D&D tab: one game, 7pm on those days
+            self.dnd_games = [clean_dnd_game({"title": "Game night", "days": self.dnd_days,
+                                              "start": "19:00", "hours": 4})]
+        if isinstance(d.get("dnd_opts"), dict):
+            for k in ("use_name", "dress"):
+                if k in d["dnd_opts"]:
+                    self.dnd_opts[k] = bool(d["dnd_opts"][k])
+        ini = d.get("dnd_init")
+        if isinstance(ini, dict) and isinstance(ini.get("order"), list):
+            order = [[str(e[0])[:24], int(e[1])] for e in ini["order"]
+                     if isinstance(e, (list, tuple)) and len(e) == 2 and isinstance(e[1], (int, float))]
+            self.dnd_init = {"order": order[:30],
+                             "turn": int(ini.get("turn", 0)) if order else 0,
+                             "round": max(1, int(ini.get("round", 1)))}
+        self.dnd_sync_days()
         if isinstance(d.get("birthdays"), list):
             self.birthdays = [b for b in (clean_birthday(x) for x in d["birthdays"]
                                           if isinstance(x, dict) and "name" in x) if b]
@@ -6316,6 +6752,9 @@ class Pet(QWidget):
         return frames
 
     def current_accessory(self):
+        s = self.dnd_now() if self.dnd_games else None
+        if s and self.dnd_opts.get("dress", True):
+            return "book" if s[0]["role"] == "dm" else "sword"      # game time!
         if self.acc_mode == "none":
             return None
         if self.acc_mode != "auto":
@@ -6886,7 +7325,7 @@ class Pet(QWidget):
         if not self.welcome_enabled or self.reminder_active or self.focus_end or self.med_end:
             return
         if away >= 3 * 3600:
-            nm = (", " + self.nickname) if getattr(self, "nickname", "") else ""
+            nm = (", " + self.call_name()) if self.call_name() else ""
             self.say(f"Welcome back{nm}! It's been a while~", 4000)
         else:
             self.say(random.choice(WELCOME_LINES), 3500)
@@ -7084,9 +7523,107 @@ class Pet(QWidget):
             self.say(line, 7000)
             self.happy = 20
 
+    # ---------- D&D ----------
+    def dnd_sync_days(self):
+        """dnd_days (used for the countdown and solo play) = every day that has a game."""
+        if self.dnd_games:
+            self.dnd_days = [d for d in DAY_ORDER if any(d in g["days"] for g in self.dnd_games)]
+
+    def dnd_now(self):
+        """(game, start, end) if one of your games is on right now (checked every few seconds)."""
+        t = time.time()
+        if t - self.dnd_cache[0] > 5:
+            self.dnd_cache = (t, dnd_session_at(self.dnd_games, datetime.now()))
+        return self.dnd_cache[1]
+
+    def dnd_changed(self):
+        self.dnd_sync_days()
+        self.dnd_cache = (0.0, None)
+        self.save_custom()
+
+    def call_name(self):
+        """What she calls you: your table name during a game (if you want), else your nickname."""
+        s = self.dnd_now()
+        if s and self.dnd_opts.get("use_name", True):
+            g = s[0]
+            if g["char"]:
+                return g["char"]
+            if g["role"] == "dm":
+                return "Dungeon Master"
+        return getattr(self, "nickname", "")
+
+    def check_dnd(self):
+        if not self.dnd_games or getattr(self, "intro_step", -1) >= 0:
+            return
+        now = datetime.now()
+        cur = self.dnd_now()
+        if cur:
+            g, st, end = cur
+            key = (st, g["title"], "start")
+            if key not in self.dnd_said and now - st < timedelta(minutes=15):
+                self.dnd_said.add(key)
+                name = self.call_name() or ("Dungeon Master" if g["role"] == "dm" else "adventurer")
+                lines = DND_DM_LINES if g["role"] == "dm" else DND_START_LINES
+                if not self.reminder_active:
+                    self.say(random.choice(lines).format(name=name), 5000)
+                    self.happy = 40
+                    self.jump = 20
+            self.dnd_last = (g, st, end)
+            return
+        last = getattr(self, "dnd_last", None)
+        if last:                                  # a game just ended
+            self.dnd_last = None
+            g, st, end = last
+            key = (st, g["title"], "end")
+            if key not in self.dnd_said and now - end < timedelta(minutes=10):
+                self.dnd_said.add(key)
+                name = g["char"] if (g["char"] and self.dnd_opts.get("use_name", True)) else self.nickname
+                if not self.reminder_active:
+                    self.say(random.choice(DND_END_LINES).format(name=name or "friend"), 5000)
+        nxt = dnd_next_game(self.dnd_games, now)
+        if nxt:
+            g, st = nxt
+            key = (st, g["title"], "soon")
+            if key not in self.dnd_said and timedelta(0) < st - now <= timedelta(minutes=DND_HEADS_UP):
+                self.dnd_said.add(key)
+                mins = max(1, int((st - now).total_seconds() // 60))
+                if not self.reminder_active:
+                    self.say(f"{g['title']} starts in {mins} minutes! Dice ready? \U0001F3B2", 5000)
+
+    def dnd_turn_name(self):
+        o = self.dnd_init["order"]
+        return o[self.dnd_init["turn"] % len(o)][0] if o else None
+
+    def dnd_next_turn(self):
+        o = self.dnd_init["order"]
+        if not o:
+            self.say("Nobody's in initiative yet! Add them in Customize \u2192 D&D~", 3000)
+            return
+        self.dnd_init["turn"] += 1
+        if self.dnd_init["turn"] >= len(o):
+            self.dnd_init["turn"] = 0
+            self.dnd_init["round"] += 1
+        self.save_custom()
+        self.dnd_announce_turn()
+
+    def dnd_announce_turn(self):
+        who = self.dnd_turn_name()
+        if not who:
+            return
+        mine = {g["char"].lower() for g in self.dnd_games if g["char"]}
+        rnd = self.dnd_init["round"]
+        if who.lower() in mine:
+            self.say(f"Your turn, {who}! You've got this! \u2694\ufe0f", 3500)
+            self.happy = 30
+        elif self.dnd_init["turn"] == 0:
+            self.say(f"Round {rnd}! {who} goes first~", 3000)
+        else:
+            self.say(f"{who}'s turn!", 2500)
+
     def check_reminders(self):
         self.check_birthdays()
         self.check_cycle()
+        self.check_dnd()
         now = datetime.now()
         key = now.strftime("%H:%M")
         today = now.strftime("%Y-%m-%d")
@@ -7711,6 +8248,51 @@ class Pet(QWidget):
         cache[key] = res
         return res
 
+    def draw_hand_item(self, p, b, acc, dark):
+        """Drawn book / sword in her hand (her mittens are at about (73, 168) and (147, 168))."""
+        p.save()
+        p.setPen(QPen(dark, 1.3))
+        if acc == "book":
+            p.translate(73, 166 + b)
+            p.rotate(-8)
+            p.setBrush(QBrush(QColor("#fff3dc")))
+            p.drawRect(QRectF(-10, -31, 23, 28))                           # pages peeking out
+            p.setBrush(QBrush(QColor("#5e3d8f")))
+            p.drawRoundedRect(QRectF(-12, -32, 23, 30), 2, 2)              # cover
+            p.setBrush(QBrush(QColor("#462c6e")))
+            p.drawRect(QRectF(-12, -32, 3, 30))                            # spine
+            p.setPen(QPen(QColor("#f2c14e"), 0.9))
+            p.setBrush(Qt.NoBrush)
+            p.drawRect(QRectF(-7.5, -29.5, 16, 25))                        # gold border
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(QColor("#f2c14e")))
+            pts = [(90, 70), (85, 76), (71, 82), (61, 91), (64, 74), (54, 59), (52, 88), (55, 100),
+                   (30, 93), (30, 76), (14, 80), (35, 55), (22, 45), (5, 31), (15, 16), (25, 18),
+                   (14, 28), (29, 38), (28, 24), (39, 30), (64, 25), (63, 41), (73, 60), (86, 66)]
+            p.drawPolygon(QPolygonF([QPointF(0.5 + (x - 47.5) * 0.17, -17 - (y - 58) * 0.17)
+                                     for x, y in pts]))                    # the dragon
+            p.setBrush(QBrush(QColor("#ff7eb6")))
+            p.drawPolygon(QPolygonF([QPointF(5, -3), QPointF(7.5, -3), QPointF(7.5, 5),
+                                     QPointF(6.2, 3.5), QPointF(5, 5)]))   # ribbon bookmark
+        else:
+            p.translate(147, 168 + b)
+            p.rotate(28)
+            p.setBrush(QBrush(QColor("#e3e9f2")))
+            p.drawPolygon(QPolygonF([QPointF(-3, -9), QPointF(3, -9), QPointF(3, -38),
+                                     QPointF(0, -45), QPointF(-3, -38)]))  # blade
+            p.setPen(QPen(QColor("#b7c6e4"), 1.2))
+            p.drawLine(QPointF(0, -12), QPointF(0, -36))
+            p.setPen(QPen(dark, 1.3))
+            p.setBrush(QBrush(QColor("#6b5fb5")))
+            p.drawRoundedRect(QRectF(-2, -7, 4, 12), 1.5, 1.5)             # grip
+            p.setBrush(QBrush(QColor("#f2c14e")))
+            p.drawRoundedRect(QRectF(-9, -10, 18, 4), 2, 2)                # crossguard
+            p.drawEllipse(QPointF(0, 7), 2.8, 2.8)                         # pommel
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(QColor("#ff7eb6")))
+            p.drawEllipse(QPointF(0, -8), 1.6, 1.6)                        # gem
+        p.restore()
+
     def draw_pinned_accessory(self, p, pm, target, acc):
         """A drawn outfit, moved to wherever her head is in this picture (it follows every pose)."""
         here = self.head_anchor(pm)
@@ -7734,6 +8316,9 @@ class Pet(QWidget):
     def draw_accessory_3d(self, p, b, acc):
         """Outfits sized for her 3D body (head center ~ (110, 90), neck ~ y 131)."""
         dark = QColor("#1b1b1b")
+        if acc in HAND_ACCS:
+            self.draw_hand_item(p, b, acc, dark)
+            return
         if acc == "witch":
             p.setPen(QPen(dark, 2))
             p.setBrush(QBrush(QColor("#2e2342")))
@@ -8031,7 +8616,8 @@ class Pet(QWidget):
                     p.drawPixmap(QRectF(15, 38 + b - hx, 190, 207 + hx), hp, QRectF(hp.rect()))
             acc = self.current_accessory()
             if (acc and not self.bed and not dressed
-                    and not state.startswith("peek") and state in ACC_DROP_OK):
+                    and not state.startswith("peek") and state in ACC_DROP_OK
+                    and not (acc in HAND_ACCS and state.startswith(HAND_BUSY))):
                 self.draw_pinned_accessory(p, pm, target, acc)
         elif self.singing and self.dance_enabled:
             p.translate(110, 150)

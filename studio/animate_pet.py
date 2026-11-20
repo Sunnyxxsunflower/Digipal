@@ -1342,6 +1342,119 @@ STAR = on_head((0.62, -0.42, 0.45), 0.6, "StarClipFrame")
 OUTFITS["star"].append(hat_part(star_mesh("StarClip", 0.2, 0.085, 0.06), yolk, STAR, (0, 0, 0)))
 
 
+# ---- hand items (the D&D update): a dragon book for DMs and a little sword for players --------
+# These ride on her arm frames, so they follow her hand in every pose. Poses where her hands are
+# busy (typing, hugging, the camera...) aren't rendered with them: the app shows her without.
+HAND_ITEMS = ("book", "sword")
+HAND_BUSY = ("typing", "camera", "gaming", "cuddle_", "meditate", "stretch", "shy", "shiver",
+             "umbrella", "peek", "sleep_")
+HAND_AT = Vector((0.32, 0, -0.44))      # her mitten, relative to the shoulder pivot (ARM_REST)
+
+
+def flat_mesh(name, pts, thick, bevel=0.4):
+    """A flat shape (points in x, y) with some thickness, standing up and facing you:
+    x stays x, y becomes up (z), and the thickness sticks out toward you."""
+    import bmesh
+    bm = bmesh.new()
+    vs = [bm.verts.new((x, y, 0)) for x, y in pts]
+    f = bm.faces.new(vs)
+    ext = bmesh.ops.extrude_face_region(bm, geom=[f])
+    moved = [e for e in ext["geom"] if isinstance(e, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=(0, 0, thick), verts=moved)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0),
+                     matrix=Matrix.Rotation(math.radians(90), 3, "X"))
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    if bevel:
+        bv = o.modifiers.new("Soft", "BEVEL")
+        bv.width = thick * bevel
+        bv.segments = 3
+        bv.limit_method = "ANGLE"
+    return o
+
+
+def soft_box(size, bevel=0.012):
+    bpy.ops.mesh.primitive_cube_add(size=1)
+    o = made()
+    o.scale = size
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    bv = o.modifiers.new("Soft", "BEVEL")
+    bv.width = bevel
+    bv.segments = 3
+    return o
+
+
+def ball(r):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=r)
+    return made()
+
+
+gold_trim = outfit_mat("of_gold", "#f2c14e", 0.35)
+
+# -- the dragon book: purple cover, gold border and a gold dragon with spread wings, cream pages,
+#    a pink ribbon bookmark. Her left hand (on your left) holds it by the bottom of the spine.
+book_cover = outfit_mat("of_bookcover", "#5e3d8f", 0.55)
+book_spine = outfit_mat("of_bookspine", "#462c6e", 0.55)
+book_pages = outfit_mat("of_pages", "#fff3dc", 0.8)
+book_ribbon = outfit_mat("of_ribbon", "#ff7eb6", 0.6)
+BOOK = local_empty("BookFrame", ARM[-1], (-HAND_AT.x, 0.03, HAND_AT.z), (0, math.radians(-8), 0))
+BW, BH, BT = 0.34, 0.42, 0.085          # width, height, thickness
+BZ = 0.2                                # book middle, above her mitten
+OUTFITS["book"] = []
+OUTFITS["book"].append(hat_part(soft_box((BW - 0.02, BT - 0.02, BH - 0.025), 0.004), book_pages, BOOK,
+                                (0.01, 0, BZ)))                                       # the pages
+for sy in (-1, 1):
+    OUTFITS["book"].append(hat_part(soft_box((BW, 0.014, BH)), book_cover, BOOK,
+                                    (0, sy * (BT / 2 - 0.007), BZ)))                  # front and back cover
+OUTFITS["book"].append(hat_part(soft_box((0.02, BT, BH)), book_spine, BOOK,
+                                (-BW / 2 + 0.006, 0, BZ)))                            # the spine (outer side)
+# gold border on the front cover
+FY = -BT / 2 - 0.004                    # just in front of the cover
+for (w, h, dx, dz) in ((BW - 0.05, 0.012, 0, BH / 2 - 0.03), (BW - 0.05, 0.012, 0, -BH / 2 + 0.03),
+                       (0.012, BH - 0.05, BW / 2 - 0.03, 0), (0.012, BH - 0.05, -BW / 2 + 0.03, 0)):
+    OUTFITS["book"].append(hat_part(soft_box((w, 0.008, h), 0.003), gold_trim, BOOK, (dx, FY, BZ + dz)))
+# the dragon, from the side: snout, horn, a big spiky wing, legs and a curling tail (facing her)
+dragon = [(90, 70), (85, 76), (76, 79), (71, 82), (61, 91), (66, 80), (64, 74), (58, 66), (54, 59),
+          (51, 58), (50, 72), (52, 88), (55, 100), (44, 85), (30, 93), (30, 76), (14, 80), (22, 64),
+          (35, 55), (33, 48), (22, 45), (12, 40), (5, 31), (7, 21), (15, 16), (25, 18), (19, 22),
+          (14, 28), (18, 35), (29, 38), (31, 32), (28, 24), (37, 22), (39, 30), (50, 32), (55, 27),
+          (64, 25), (62, 32), (63, 41), (67, 52), (73, 60), (80, 64), (86, 66)]
+o = flat_mesh("BookDragon", [((x - 47.5) * 0.0028, (y - 58) * 0.0028) for x, y in dragon], 0.008,
+              bevel=0.3)
+OUTFITS["book"].append(hat_part(o, gold_trim, BOOK, (0, -BT / 2 + 0.0005, BZ + 0.035)))
+# ribbon bookmark hanging out of the bottom, on the side toward her
+rib = [(-0.016, 0.0), (0.016, 0.0), (0.016, -0.12), (0.0, -0.1), (-0.016, -0.12)]
+OUTFITS["book"].append(hat_part(flat_mesh("BookRibbon", rib, 0.006, bevel=0.2), book_ribbon, BOOK,
+                                (BW / 2 - 0.07, -0.01, BZ - BH / 2 + 0.01)))
+
+# -- the sword: a little toy-like hero sword in her right hand (on your right), held up and out.
+#    Built pointing straight up from her grip, then the frame leans it outward.
+blade_m = outfit_mat("of_blade", "#e3e9f2", 0.25)
+fuller_m = outfit_mat("of_fuller", "#b7c6e4", 0.3)
+grip_m = outfit_mat("of_grip", "#6b5fb5", 0.6)
+gem_m = outfit_mat("of_gem", "#ff7eb6", 0.2)
+SWORD = local_empty("SwordFrame", ARM[1], (HAND_AT.x, -0.02, HAND_AT.z), (0, math.radians(28), 0))
+OUTFITS["sword"] = []
+bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.026, depth=0.15)
+OUTFITS["sword"].append(hat_part(made(), grip_m, SWORD, (0, 0, 0)))                    # the grip
+OUTFITS["sword"].append(hat_part(ball(0.04), gold_trim, SWORD, (0, 0, -0.095)))        # pommel
+OUTFITS["sword"].append(hat_part(soft_box((0.25, 0.05, 0.045), 0.015), gold_trim, SWORD,
+                                 (0, 0, 0.095)))                                       # crossguard
+for sx in (-1, 1):
+    OUTFITS["sword"].append(hat_part(ball(0.03), gold_trim, SWORD, (0.125 * sx, 0, 0.095)))
+OUTFITS["sword"].append(hat_part(ball(0.022), gem_m, SWORD, (0, -0.03, 0.095)))      # the gem
+blade = [(-0.042, 0.0), (0.042, 0.0), (0.042, 0.42), (0.0, 0.52), (-0.042, 0.42)]
+OUTFITS["sword"].append(hat_part(flat_mesh("SwordBlade", blade, 0.022, bevel=0.45), blade_m, SWORD,
+                                 (0, 0.011, 0.115)))
+fuller = [(-0.009, 0.0), (0.009, 0.0), (0.009, 0.36), (0.0, 0.39), (-0.009, 0.36)]
+OUTFITS["sword"].append(hat_part(flat_mesh("SwordFuller", fuller, 0.004, bevel=0), fuller_m, SWORD,
+                                 (0, -0.012, 0.15)))
+
+
 # mittens that grip a window's edge while she peeks (not attached to her arms:
 # the window hides her arms)
 def grip(x, z):
@@ -2334,7 +2447,8 @@ HAIR = "hair" in ARGS                  # also make a recolorable hair layer for 
 SPLIT_BOTTOMS = "baked" not in ARGS
 ONLY = [a for a in ARGS if a not in ("outfits", "preview", "all", "hair", "bottoms", "baked",
                                      "santa", "witch", "ears", "flower", "scarf", "party", "heart",
-                                     "sunhat", "beret", "bunny", "glasses", "bow", "star")
+                                     "sunhat", "beret", "bunny", "glasses", "bow", "star",
+                                     "book", "sword")
         and a not in HAIRSTYLES]
 # hair styles are rendered as separate layers too (pick some by name, otherwise all of them)
 LAYERED_HAIR = "baked" not in ARGS
@@ -2369,9 +2483,13 @@ def shoot(state, i):
     else:
         if state.endswith("_hands") or state.startswith("sleep_") or state == "umbrella":
             return
+        if CURRENT_OUTFIT in HAND_ITEMS and state.startswith(HAND_BUSY):
+            return                      # her hands are busy: the app shows her without it
         if ONLY and state not in ONLY:
             return
-        if PREVIEW and not (i == 0 and state in ("idle", "peekside", "peektop")):
+        look = (("idle", "walk", "happy", "sitfloor", "sit", "scared", "held", "sing")
+                if CURRENT_OUTFIT in HAND_ITEMS else ("idle", "peekside", "peektop"))
+        if PREVIEW and not (i == 0 and state in look):
             return
         folder = os.path.join(OUT_DIR, "outfit_" + CURRENT_OUTFIT)
         os.makedirs(folder, exist_ok=True)
