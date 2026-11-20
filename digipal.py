@@ -211,6 +211,15 @@ INTRO_STEPS = [
 MODE_BUTTONS = [("\U0001F3AE\nGames", "gaming"), ("\U0001F409\nD&&D", "dnd"), ("\U0001F37F\nMovie", "movie"),
                 ("\U0001F3A5\nStream", "stream"), ("\U0001F4E3\nCheer", "cheer"),
                 ("\U0001F319\nNone", "off"), ("\u2715", "close")]
+# rock, paper, scissors
+RPS_BUTTONS = [("\u270A\nRock", "rock"), ("\u270B\nPaper", "paper"), ("\u270C\ufe0f\nScissors", "scissors"),
+               ("\u2715", "close")]
+RPS_EMOJI = {"rock": "\u270A", "paper": "\u270B", "scissors": "\u270C\ufe0f"}
+RPS_BEATS = {"rock": "scissors", "paper": "rock", "scissors": "paper"}     # each one beats the next
+RPS_WIN = ["I win! Hehe~", "Yay, I got you!", "Victory! \u2728", "Ha! Better luck next time~"]
+RPS_LOSE = ["Aww, you got me!", "Nooo~ you win this one!", "Hmph... nice one!", "You're too good!"]
+RPS_TIE = ["Same! Great minds~", "A tie! Again!", "Jinx! \U0001F440"]
+
 GAMING_START = ["Game time! \U0001F3AE I'll play over here~", "Ooh, let's play together! \U0001F3AE",
                 "Player 2 ready! \U0001F3AE"]
 GAMING_END = ["GG! That was fun! \U0001F3AE", "I almost beat that level!", "Good game~ \u2665"]
@@ -289,7 +298,7 @@ HEART = QColor("#ff6b8b")
 NOTE = QColor("#9b8cd9")
 
 # ---- updates (from Digi's home on GitHub) ----
-APP_VERSION = 40                       # bump this (and version.json) when you publish a new Digi
+APP_VERSION = 41                       # bump this (and version.json) when you publish a new Digi
 UPDATE_REPO = "Sunnyxxsunflower/Digipal"
 UPDATE_RAW = "https://raw.githubusercontent.com/%s/main/" % UPDATE_REPO
 APP_LOCK = None                       # the "only one Digi" lock (let go of it when restarting)
@@ -3961,6 +3970,9 @@ class Pet(QWidget):
         self.med_asked_since = 0
         self.med_awaiting_more = False    # time's up: "keep going?"
         self.choice_bar = None
+        self.rps = {"you": 0, "digi": 0, "tie": 0}   # rock-paper-scissors, all time
+        self.rps_game = [0, 0]                       # this game: you, Digi
+        self.rps_busy = False                        # mid "rock... paper... scissors..."
         self.choice_big = False
         self.choice_since = 0.0
         self.menu_open = False            # one of her right-click menus is open: she holds still
@@ -4901,6 +4913,7 @@ class Pet(QWidget):
             pm.addAction("Put the ball away", self.end_ball)
         else:
             pm.addAction("Toss a ball!", self.toss_ball)
+        pm.addAction("\u270A Rock, paper, scissors", self.play_rps)
         pm.addAction("Throw a bomb! \U0001F4A3", self.throw_bomb)
         dm = pm.addMenu("Roll dice")
         for sides in DICE:
@@ -5372,6 +5385,54 @@ class Pet(QWidget):
         if self.game_mode:
             return "cheer"
         return "off"
+
+    # ----- rock, paper, scissors -----
+    def play_rps(self):
+        self.rps_game = [0, 0]
+        self.walking = False
+        self.say("Rock, paper, scissors! Pick one~ \u270A\u270B\u270C\ufe0f", 6000)
+        self.show_choices(RPS_BUTTONS, self.rps_pick, big=True)
+
+    def rps_pick(self, you):
+        if you == "close":
+            g = self.rps_game
+            if g[0] or g[1]:
+                end = ("You win the game!" if g[0] > g[1] else "I win the game! \u2728" if g[1] > g[0]
+                       else "It's a draw!")
+                self.say(f"Good game! {end} (You {g[0]} \u00b7 Digi {g[1]})", 4000)
+            else:
+                self.say("Okay, maybe later~", 2000)
+            return
+        her = random.choice(list(RPS_BEATS))
+        self.rps_busy = True                 # she holds still for the countdown
+        self.walking = False
+        steps = ["Rock...", "Paper...", "Scissors...", "Shoot!"]
+        for i, word in enumerate(steps):
+            QTimer.singleShot(420 * i, lambda w=word: self.say(w, 600))
+        QTimer.singleShot(420 * len(steps), lambda: self.rps_reveal(you, her))
+
+    def rps_reveal(self, you, her):
+        self.rps_busy = False
+        vs = f"{RPS_EMOJI[you]} vs {RPS_EMOJI[her]}"
+        if you == her:
+            self.rps["tie"] += 1
+            line = random.choice(RPS_TIE)
+            self.boop_until = time.time() + 1.4          # a surprised little jump
+        elif RPS_BEATS[her] == you:
+            self.rps["digi"] += 1
+            self.rps_game[1] += 1
+            line = random.choice(RPS_WIN)
+            self.happy = 40
+            self.jump = 20
+        else:
+            self.rps["you"] += 1
+            self.rps_game[0] += 1
+            line = random.choice(RPS_LOSE)
+            self.shy_until = time.time() + 2.2           # pouty and shy
+        g = self.rps_game
+        self.say(f"{vs}  {line}\nYou {g[0]} \u00b7 Digi {g[1]}  (\u2715 to stop)", 45000)
+        self.save_custom()
+        self.show_choices(RPS_BUTTONS, self.rps_pick, big=True)    # ready for the next round
 
     def show_modes(self):
         self.show_choices(MODE_BUTTONS, self.pick_mode, active=self.current_mode(), big=True)
@@ -6941,7 +7002,7 @@ class Pet(QWidget):
                            "med_guide": self.med_guide, "med_time": self.med_time,
                            "med_asked_day": self.med_asked_day, "med_sound": self.med_sound,
                            "med_volume": self.med_volume, "med_chime": self.med_chime,
-                           "intro_done": self.intro_done}, f)
+                           "intro_done": self.intro_done, "rps": self.rps}, f)
         except Exception:
             pass
 
@@ -6965,6 +7026,10 @@ class Pet(QWidget):
             # game nights from before the D&D tab: one game, 7pm on those days
             self.dnd_games = [clean_dnd_game({"title": "Game night", "days": self.dnd_days,
                                               "start": "19:00", "hours": 4})]
+        if isinstance(d.get("rps"), dict):
+            for k in ("you", "digi", "tie"):
+                if isinstance(d["rps"].get(k), int):
+                    self.rps[k] = max(0, d["rps"][k])
         if isinstance(d.get("dnd_opts"), dict):
             for k in ("use_name", "dress", "notes_pin"):
                 if k in d["dnd_opts"]:
@@ -8450,8 +8515,8 @@ class Pet(QWidget):
             return
         if self.med_end:
             return                              # she stays put on her cushion
-        if self.menu_open:
-            return                              # her menu is open: hold still so it's easy to use
+        if self.menu_open or self.rps_busy:
+            return                              # her menu is open (or a game): hold still
         if self.choice_bar is not None:
             if self.choice_big and time.time() - self.choice_since > 45:
                 self.close_choices()            # the Modes buttons, left alone: put them away
