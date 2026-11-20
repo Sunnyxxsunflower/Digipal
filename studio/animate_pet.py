@@ -1110,12 +1110,12 @@ OUTFITS["beret"].append(hat_part(o, gold_pin, PIN, (0, 0, 0.03)))               
 
 # bunny ears, sculpted as one smooth piece each (not stacked balls): narrow where they meet her
 # head, wide in the middle, a round tip, a soft cupped front with the pink inside, curving back a
-# little. The left one stands up; the right one flops over (forward and out) partway up, in one soft fold.
+# little. The left one stands up; the right one flops forward partway up, in one soft fold.
 bunny_white = outfit_mat("of_bunny", "#fbf8ff", 0.8)
 
 
-def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40, fold_dir=0.0):
-    """fold: how far the top bends over (degrees); fold_dir: which way (0 = out to `side`, 90 = toward you)."""
+def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40, forward=False):
+    """fold: how far the top bends over (degrees): sideways toward `side`, or toward you if forward."""
     import bmesh
     bm = bmesh.new()
     ring_verts, ring_s = [], []
@@ -1125,14 +1125,14 @@ def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40, fold_dir=0
         sk = min(k / rings, 0.995)
         u = min(1.0, max(0.0, (sk - 0.46) / 0.26)) if fold else 0.0    # a slow, soft bend
         th = math.radians(fold) * u * u * (3 - 2 * u)   # bend angle so far (a soft fold)
-        # the whole cross-section turns together as the ear bends over, toward `fold_dir`
-        # (0 = straight out to the side, 90 = straight toward you)
-        bd = math.radians(fold_dir)
-        f = Vector((side * math.cos(bd), -math.sin(bd), 0))
-        R = Matrix.Rotation(th, 3, Vector((-f.y, f.x, 0)))
-        d = (R @ Vector((0, 0.12 * sk * (1 - u), 1))).normalized()
-        xa = R @ Vector((1, 0, 0))                                    # across the ear
-        ya = R @ Vector((0, 1, 0))                                    # front-to-back
+        if forward:                             # flops over toward you, like a floppy bunny ear
+            d = Vector((0, 0.12 * sk * (1 - u) - math.sin(th), math.cos(th))).normalized()
+            xa = Vector((1, 0, 0))
+            ya = d.cross(xa).normalized()      # the ear's back side (the front is -ya)
+        else:
+            d = Vector((side * math.sin(th), 0.12 * sk, math.cos(th))).normalized()
+            xa = Vector((math.cos(th), 0, -side * math.sin(th)))          # across the ear
+            ya = d.cross(xa).normalized() * (-1 if d.cross(xa).y < 0 else 1)  # front-to-back
         cap = math.sqrt(max(0.0, 1 - ((sk - 0.7) / 0.3) ** 2)) if sk > 0.7 else 1.0
         w = (0.08 + 0.07 * math.sin(math.pi * sk * 0.85)) * cap      # width
         t = (0.06 - 0.02 * sk) * cap                                  # thickness
@@ -1156,7 +1156,7 @@ def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40, fold_dir=0
             f = bm.faces.new((a[j], a[j2], b[j2], b[j]))
             ph = 2 * math.pi * (j + 0.5) / around
             sm = (ring_s[k] + ring_s[k + 1]) / 2
-            if math.sin(ph) < -0.3 and abs(math.cos(ph)) < 0.72 and 0.28 < sm < 0.88:
+            if math.sin(ph) < -0.3 and abs(math.cos(ph)) < 0.72 and 0.2 < sm < 0.88:
                 f.material_index = 1                # the pink inside of the ear
     for ring, s_ in ((ring_verts[0], True), (ring_verts[-1], False)):   # close both ends
         c = bm.verts.new(sum((v.co for v in ring), Vector()) / len(ring))
@@ -1177,7 +1177,7 @@ for sx, lean in ((-1, 12), (1, 16)):
     r = 0.5
     root = empty("BunnyEar%d" % sx, (r * math.sin(ang), 0.02, 2.015 + r * math.cos(ang)), HEAD)
     root.rotation_euler = (0, math.radians(lean) * sx, 0)
-    o = bunny_ear("BunnyEarMesh%d" % sx, sx, fold=0.0 if sx < 0 else 115.0, fold_dir=40.0)
+    o = bunny_ear("BunnyEarMesh%d" % sx, sx, fold=0.0 if sx < 0 else 110.0, forward=True)
     o = hat_part(o, bunny_white, root, (0, 0, 0))
     o.data.materials.append(ear_in)
     OUTFITS["bunny"].append(o)
@@ -1241,7 +1241,7 @@ def bow_loop(name, length, height, depth):
 for sx in (-1, 1):
     # big loops behind, tips lifted a little
     o = bow_loop("BowBack%d" % sx, 0.42, 0.27, 0.09)
-    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.03 * sx, 0.02, -0.02),
+    OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0.03 * sx, 0.02, 0.02),
                                    (0, 0, math.radians(90 - sx * 90 + sx * 14))))
     # smaller loops in front, tips dipping a little
     o = bow_loop("BowFront%d" % sx, 0.3, 0.19, 0.08)
@@ -1250,7 +1250,7 @@ for sx in (-1, 1):
 bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
 o = made()
 o.scale = (0.075, 0.09, 0.07)
-OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0, -0.01, 0.08)))           # the wrapped knot
+OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0, -0.01, 0.1)))            # the wrapped knot
 
 # long ribbon tails: from behind the knot, down past her ears, flat side toward you, notched ends
 BOWTAILS = empty("BowTailFrame", tuple(HEAD_C), HEAD)
@@ -1262,9 +1262,10 @@ def ribbon_tail(name, sx, width=0.16, steps=24):
     pts = []
     for k in range(steps + 1):
         t = k / steps
-        fwd = math.sin(min(1.0, t * 3) * math.pi / 2)
+        fwd = min(1.0, max(0.0, (t - 0.14) / 0.3))
+        fwd = fwd * fwd * (3 - 2 * fwd)        # stays behind the loops until it's below them
         pts.append(Vector((sx * (0.3 + 0.5 * math.sin(t * math.pi * 0.5)) + 0.03 * math.sin(t * 7),
-                           -0.12 - 0.22 * fwd, 0.62 - 0.72 * t)))  # starts hidden behind the loops,
+                           -0.06 - 0.28 * fwd, 0.62 - 0.72 * t)))  # starts hidden behind the loops,
                                                                     # then hangs down at her sides,
                                                                     # in front of her ponytails
     rows = []
