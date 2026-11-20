@@ -3961,6 +3961,9 @@ class Pet(QWidget):
         self.med_asked_since = 0
         self.med_awaiting_more = False    # time's up: "keep going?"
         self.choice_bar = None
+        self.choice_big = False
+        self.choice_since = 0.0
+        self.menu_open = False            # one of her right-click menus is open: she holds still
         self.sleep_hours_set = list(SLEEP_HOURS)
         self.apply_personal(PERSONAL)     # someone's own starting setup, if there is one
         self.text_size = "medium"
@@ -4823,7 +4826,7 @@ class Pet(QWidget):
         menu.addAction("Got it!", self.dismiss_reminder)
         menu.addAction("Snooze 10 minutes", lambda *a: self.snooze(10))
         menu.addAction("Snooze 30 minutes", lambda *a: self.snooze(30))
-        menu.exec(pos)
+        self.run_menu(menu, pos)
 
     def dismiss_reminder(self):
         self.msg = None
@@ -5033,7 +5036,18 @@ class Pet(QWidget):
         else:
             menu.addAction("Check for updates", lambda *a: self.check_updates(manual=True))
         menu.addAction("Quit", QApplication.quit)
-        menu.exec(e.globalPos())
+        self.run_menu(menu, e.globalPos())
+
+    def run_menu(self, menu, pos):
+        """Open one of her menus. She holds still (and quiet) while it's open, so it doesn't
+        get away from you or close on you while you're looking through it."""
+        self.menu_open = True
+        self.walking = False
+        try:
+            menu.exec(pos)
+        finally:
+            self.menu_open = False
+            self.idle_cd = max(self.idle_cd, 250)      # and a little pause before she wanders off
 
     # ---------- water ----------
     def load_water(self):
@@ -7163,6 +7177,8 @@ class Pet(QWidget):
             self.choice_bar = None
             on_pick(key)
         self.choice_bar = ChoiceBar(self, options, picked, active, big)
+        self.choice_big = big
+        self.choice_since = time.time()
 
     def close_choices(self):
         if self.choice_bar is not None:
@@ -8431,6 +8447,13 @@ class Pet(QWidget):
             return
         if self.med_end:
             return                              # she stays put on her cushion
+        if self.menu_open:
+            return                              # her menu is open: hold still so it's easy to use
+        if self.choice_bar is not None:
+            if self.choice_big and time.time() - self.choice_since > 45:
+                self.close_choices()            # the Modes buttons, left alone: put them away
+            else:
+                return                          # buttons under her: hold still so you can click them
         if self.activity:
             self.do_activity_move()
             return
@@ -8584,7 +8607,8 @@ class Pet(QWidget):
         self.update_bed()
 
         # idle chatter
-        self.idle_cd -= 1
+        if not self.menu_open:
+            self.idle_cd -= 1
         if self.idle_cd <= 0:
             if (not self.msg and not self.happy and not self.singing
                     and not self.sleepy and not self.focus_end
