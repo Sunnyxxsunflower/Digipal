@@ -1173,7 +1173,7 @@ OUTFITS["glasses"].append(rod((-0.13, -0.58, HEAD_C.z + EYE_Z + 0.03),
 # big satin hair bow on top of her head, like Nancy's reference: two layers of loops (big ones
 # behind, smaller ones in front), a wrapped knot, long ribbon tails hanging down past her ears
 # with notched ends, and a tiny gold charm dangling on one side
-bow_pink = outfit_mat("of_bow", "#e99aa6", 0.35)       # soft dusty-rose satin
+bow_pink = outfit_mat("of_bow", "#c9707e", 0.35)       # dusty-rose satin (the lights lift it to about #e3a0a8)
 # standing up on the top-front of her head, facing you (tipped back a little), the bottom of the
 # loops tucked into her hair
 BOW = empty("BowFrame", tuple(HEAD_C + Vector((0, -0.25, 0.97)).normalized() * 0.68), HEAD)
@@ -1223,14 +1223,15 @@ OUTFITS["bow"].append(hat_part(o, bow_pink, BOW, (0, -0.01, 0.08)))           # 
 BOWTAILS = empty("BowTailFrame", tuple(HEAD_C), HEAD)
 
 
-def ribbon_tail(name, sx, width=0.11, steps=24):
+def ribbon_tail(name, sx, width=0.16, steps=24):
     import bmesh
     bm = bmesh.new()
     pts = []
     for k in range(steps + 1):
         t = k / steps
-        pts.append(Vector((sx * (0.3 + 0.42 * math.sin(t * math.pi * 0.5)) + 0.03 * math.sin(t * 7),
-                           -0.12 - 0.1 * t, 0.62 - 0.78 * t)))     # starts hidden behind the loops
+        pts.append(Vector((sx * (0.3 + 0.5 * math.sin(t * math.pi * 0.5)) + 0.03 * math.sin(t * 7),
+                           -0.12 + 0.04 * t, 0.62 - 0.72 * t)))    # starts hidden behind the loops,
+                                                                    # hangs down at her sides
     rows = []
     for k, p in enumerate(pts):
         tan = (pts[min(k + 1, steps)] - pts[max(k - 1, 0)]).normalized()
@@ -1264,11 +1265,11 @@ for sx in (-1, 1):
 
 # the little gold charm, hanging from the right of the knot on a tiny chain
 bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.005, depth=0.09)
-OUTFITS["bow"].append(hat_part(made(), gold, BOW, (0.12, -0.13, 0.07), (math.radians(90), 0, 0)))
-bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.028)
+OUTFITS["bow"].append(hat_part(made(), gold, BOW, (0.27, -0.14, 0.1), (math.radians(90), 0, 0)))
+bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.036)
 o = made()
 o.scale = (1, 1, 1.25)
-OUTFITS["bow"].append(hat_part(o, gold, BOW, (0.12, -0.19, 0.07)))
+OUTFITS["bow"].append(hat_part(o, gold, BOW, (0.27, -0.21, 0.1)))         # hangs below the right loop
 
 
 # star clip on the right side, above her ear
