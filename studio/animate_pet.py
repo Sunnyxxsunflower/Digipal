@@ -1991,6 +1991,17 @@ def tuck_hair(hat_objs, margin=0.03):
     hats = [(BVHTree.FromObject(h, deps), h.matrix_world.copy(), h.matrix_world.inverted()) for h in hat_objs
             if h.type == "MESH" and any(sl.material is not None and sl.material.name.startswith("of_straw")
                                         for sl in h.material_slots)]    # the hat itself, not its ribbons
+    cam = scene.camera.matrix_world.translation.copy()
+
+    def hidden_by_hat(w):
+        """Is this point behind the hat, seen from the camera?"""
+        for tree, hw, hwi in hats:
+            a, b = hwi @ w, hwi @ cam
+            d = b - a
+            if tree.ray_cast(a + d.normalized() * 0.002, d.normalized(), d.length)[0] is not None:
+                return True
+        return False
+
     saved, seen = [], set()
     for objs in HAIRSTYLES.values():
         for o in objs:
@@ -2004,7 +2015,6 @@ def tuck_hair(hat_objs, margin=0.03):
             bm.from_mesh(me)
             mwi = mw.inverted()
             cut, moved = [], 0
-            toward_cam = Vector((0, -1, 0))
             for v in bm.verts:
                 p = mw @ v.co
                 for tree, hw, hwi in hats:
@@ -2014,17 +2024,20 @@ def tuck_hair(hat_objs, margin=0.03):
                     hit = tree.ray_cast(a0, d.normalized(), d.length) if d.length > 1e-6 else (None,)
                     if hit[0] is None or d.length - hit[3] <= margin:
                         continue
-                    # it pokes out through the hat: press it flat against the OUTSIDE of the hat,
-                    # just behind it. The hair stays one smooth piece (no cut edges, so no jagged
-                    # outlines), the hat hides the pressed part, and where the hair goes into the
-                    # hat stays the smooth curve Blender draws.
-                    out = (hw.to_3x3() @ d).normalized()
-                    if out.dot(toward_cam) > 0.3:  # that side of the hat faces you: snip instead
-                        cut.append(v)
+                    # it pokes out through the hat: press it flat against the hat, on whichever
+                    # side the hat hides from you (just behind the brim, or just inside the crown).
+                    # The hair stays one smooth piece (no cut edges, so no jagged outlines), and
+                    # where the hair goes into the hat stays the smooth curve Blender draws.
+                    # Only if neither side is hidden does that little bit get snipped.
+                    dn = d.normalized()
+                    for q in (a0 + dn * (hit[3] + margin), a0 + dn * (hit[3] - margin)):
+                        w = hw @ q
+                        if hidden_by_hat(w):
+                            v.co = mwi @ w
+                            moved += 1
+                            break
                     else:
-                        q = a0 + d.normalized() * (hit[3] + margin)
-                        v.co = mwi @ (hw @ q)
-                        moved += 1
+                        cut.append(v)
                     break
             if not cut and not moved:
                 bm.free()
