@@ -578,11 +578,15 @@ for sx in (-1, 1):
 SUNHAT_BLEND = os.path.join(HERE, "models", "StrawHat.blend")
 # one fitting per ponytail hair style (shaggy and swept share SUNHAT_SHORT further down):
 #   crown_r: how roomy the inside is, dy/dz: moved back/up on her head, tilt: tipped back (degrees),
-#   tuck: snip any hair poking out past the hat
+#   tuck: tuck away any hair poking out past the hat, back: how much shorter the brim is behind
+#   her (0-1), wave: how wavy and flowy the brim's edge is
 SUNHAT_FITS = {
-    "twintails":  {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True},
-    "shorttails": {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True},
-    "drills":     {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True},
+    "twintails":  {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True,
+                   "back": 0.4, "wave": 0.06},
+    "shorttails": {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True,
+                   "back": 0.4, "wave": 0.06},
+    "drills":     {"crown_r": 0.84, "dy": 0.10, "dz": -0.16, "tilt": -30, "tuck": True,
+                   "back": 0.4, "wave": 0.06},
 }
 SUNHAT_STYLE = {}                        # style -> (frame, hat objects, fit)
 SUNHAT_BRIM_R, SUNHAT_CROWN_R = 1.3, 0.84        # a roomy inside, so her hair fits under the hat
@@ -612,7 +616,7 @@ def strawhat_templates(path):
     return _STRAWHAT
 
 
-def import_strawhat(path, keys=None, crown_r=None, frame=None):
+def import_strawhat(path, keys=None, crown_r=None, frame=None, brim_back=0.0, brim_wave=0.0):
     """keys: shape key name -> value (the model's own floppier brim poses)."""
     keys = keys or {}
     want_r = crown_r or SUNHAT_CROWN_R          # (crown_r gets reused below for the measured one)
@@ -680,9 +684,18 @@ def import_strawhat(path, keys=None, crown_r=None, frame=None):
             k = min(1.0, max(0.0, (q.z / crown_top - 0.55) / 0.4))
             q.z += SUNHAT_DOME * k * k * (3 - 2 * k) * max(0.0, 1 - (r / edge) ** 2)
         if r > edge * 1.05:                    # the brim curves gently down, more at her sides
-            t = min(1.0, (r - edge * 1.05) / (SUNHAT_BRIM_R - edge * 1.05))
+            e0 = edge * 1.05
+            t = min(1.0, (r - e0) / (SUNHAT_BRIM_R - e0))
             side = (q.x / r) ** 2
+            back = max(0.0, q.y / r)           # 1 straight behind her head, 0 at her sides
+            if brim_back:                      # a shorter brim behind her
+                r2 = e0 + (r - e0) * (1 - brim_back * back ** 1.5)
+                q.x *= r2 / r
+                q.y *= r2 / r
             q.z -= (SUNHAT_DROOP[0] + SUNHAT_DROOP[1] * side) * t ** 1.5
+            if brim_wave:                      # soft waves all around the edge: a flowy brim
+                th = math.atan2(q.y, q.x)
+                q.z += brim_wave * t ** 1.4 * math.sin(6 * th + 0.7)
         return q
 
     for o in objs:
@@ -735,7 +748,8 @@ if os.path.exists(SUNHAT_BLEND):
         _fr = empty("SunHatFrame_" + _style, (0.0, _fit["dy"], 2.28 + _fit["dz"]), HEAD)
         _fr.rotation_euler = (math.radians(_fit["tilt"]), math.radians(-5), 0)
         SUNHAT_STYLE[_style] = (_fr, import_strawhat(SUNHAT_BLEND, SUNHAT_SHAPES,
-                                                      crown_r=_fit["crown_r"], frame=_fr), _fit)
+                                                      crown_r=_fit["crown_r"], frame=_fr,
+                                                      brim_back=_fit["back"], brim_wave=_fit["wave"]), _fit)
 else:
     SUNHAT_SHORT, SUNHAT_SHORT_OBJS = SUNHAT, []
 
