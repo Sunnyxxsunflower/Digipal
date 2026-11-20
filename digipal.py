@@ -4463,7 +4463,8 @@ class Pet(QWidget):
         elif self.bed and not self.dragging and ("sleep_" + self.bed) in self.frames:
             want = [("sleep_" + self.bed, 6)]
         elif self.pose_now():
-            want = [self.pose_now()]
+            # (asked once more: a pose can run out between the two checks, so keep a fallback)
+            want = [self.pose_now() or ("idle", 5)]
         elif time.time() < self.pout_until and not self.dragging and "blink" in self.frames:
             want = [("blink", 1)]
         elif time.time() < self.stretch_until and not self.dragging:
@@ -8988,7 +8989,22 @@ class Pet(QWidget):
             self.draw_accessory(p, b, "hat" if acc == "santa" else acc)
 
     def paintEvent(self, event):
+        # if anything goes wrong while drawing her, the painter still gets closed. (A painter left
+        # open blocks every picture after it, and she flashes white over and over.)
         p = QPainter(self)
+        try:
+            self.paint_pet(p)
+        except Exception:
+            now = time.time()
+            if now - getattr(self, "paint_err_at", 0) > 30:       # don't flood the log
+                self.paint_err_at = now
+                import traceback
+                traceback.print_exc()
+        finally:
+            if p.isActive():
+                p.end()
+
+    def paint_pet(self, p):
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
         if self.pad_x or self.pad_y:
