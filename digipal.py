@@ -4277,6 +4277,9 @@ class Pet(QWidget):
         self.rps = {"you": 0, "digi": 0, "tie": 0}   # rock-paper-scissors, all time
         self.rps_game = [0, 0]                       # this game: you, Digi
         self.rps_busy = False                        # mid "rock... paper... scissors..."
+        self.game = None                             # "trivia" / "rps" while you play: her only focus
+        self.game_talking = False
+        self.held_msgs = []                          # things she wanted to say mid-game (said after)
         self.trivia = None                           # a trivia round that's going on
         self.trivia_busy = False                     # between questions
         self.trivia_best = {}                        # best score per category
@@ -5701,8 +5704,8 @@ class Pet(QWidget):
     # ----- rock, paper, scissors -----
     def play_rps(self):
         self.rps_game = [0, 0]
-        self.walking = False
-        self.say("Rock, paper, scissors! Pick one~ \u270A\u270B\u270C\ufe0f", 6000)
+        self.start_game("rps")
+        self.game_say("Rock, paper, scissors! Pick one~ \u270A\u270B\u270C\ufe0f", 6000)
         self.show_choices(RPS_BUTTONS, self.rps_pick, big=True)
 
     def rps_pick(self, you):
@@ -5711,16 +5714,17 @@ class Pet(QWidget):
             if g[0] or g[1]:
                 end = ("You win the game!" if g[0] > g[1] else "I win the game! \u2728" if g[1] > g[0]
                        else "It's a draw!")
-                self.say(f"Good game! {end} (You {g[0]} \u00b7 Digi {g[1]})", 4000)
+                self.game_say(f"Good game! {end} (You {g[0]} \u00b7 Digi {g[1]})", 4000)
             else:
-                self.say("Okay, maybe later~", 2000)
+                self.game_say("Okay, maybe later~", 2000)
+            self.end_game(4200 if (g[0] or g[1]) else 2200)
             return
         her = random.choice(list(RPS_BEATS))
         self.rps_busy = True                 # she holds still for the countdown
         self.walking = False
         steps = ["Rock...", "Paper...", "Scissors...", "Shoot!"]
         for i, word in enumerate(steps):
-            QTimer.singleShot(420 * i, lambda w=word: self.say(w, 600))
+            QTimer.singleShot(420 * i, lambda w=word: self.game_say(w, 600))
         QTimer.singleShot(420 * len(steps), lambda: self.rps_reveal(you, her))
 
     def rps_reveal(self, you, her):
@@ -5742,15 +5746,15 @@ class Pet(QWidget):
             line = random.choice(RPS_LOSE)
             self.shy_until = time.time() + 2.2           # pouty and shy
         g = self.rps_game
-        self.say(f"{vs}  {line}\nYou {g[0]} \u00b7 Digi {g[1]}  (\u2715 to stop)", 45000)
+        self.game_say(f"{vs}  {line}\nYou {g[0]} \u00b7 Digi {g[1]}  (\u2715 to stop)", 45000)
         self.save_custom()
         self.show_choices(RPS_BUTTONS, self.rps_pick, big=True)    # ready for the next round
 
     # ----- trivia -----
     def play_trivia(self):
-        self.walking = False
+        self.start_game("trivia")
         cats = [c for c in TRIVIA_CATS if c[1] != "mine" or self.trivia_mine]
-        self.say("Trivia time! Pick a category~ \U0001F9E0", 45000)
+        self.game_say("Trivia time! Pick a category~ \U0001F9E0", 45000)
         self.show_choices(cats, self.trivia_pick_cat, big=True)
 
     def trivia_pool(self, cat):
@@ -5762,11 +5766,13 @@ class Pet(QWidget):
 
     def trivia_pick_cat(self, cat):
         if cat == "close":
-            self.say("Okay, another time~", 2000)
+            self.game_say("Okay, another time~", 2000)
+            self.end_game(2200)
             return
         pool = self.trivia_pool(cat)
         if not pool:
-            self.say("No questions there yet! Add some in Customize \u2192 Lists~", 3500)
+            self.game_say("No questions there yet! Add some in Customize \u2192 Lists~", 3500)
+            self.end_game(3700)
             return
         fresh = [q for q in pool if q[0] not in self.trivia_seen]    # not asked lately first
         old = [q for q in pool if q[0] in self.trivia_seen]
@@ -5788,7 +5794,7 @@ class Pet(QWidget):
         random.shuffle(answers)
         t["answers"] = answers
         buttons = [(a.replace("&", "&&"), str(k)) for k, a in enumerate(answers)] + [("\u2715", "close")]
-        self.say(f"Q{t['i'] + 1}/{len(t['qs'])}: {q[0]}", 120000)
+        self.game_say(f"Q{t['i'] + 1}/{len(t['qs'])}: {q[0]}", 120000)
         self.show_choices(buttons, self.trivia_answer, timeout=120)
 
     def trivia_answer(self, key):
@@ -5798,7 +5804,8 @@ class Pet(QWidget):
         if key == "close":
             done = t["i"]
             self.trivia = None
-            self.say(f"Okay! You got {t['score']}/{done} \u2665" if done else "Okay, another time~", 3000)
+            self.game_say(f"Okay! You got {t['score']}/{done} \u2665" if done else "Okay, another time~", 3000)
+            self.end_game(3200)
             return
         q = t["qs"][t["i"]]
         right = t["answers"][int(key)] == q[1]
@@ -5815,7 +5822,7 @@ class Pet(QWidget):
             t["streak"] = 0
             line = f"{random.choice(TRIVIA_WRONG)} It's {q[1]}."
             self.boop_until = time.time() + 1.2
-        self.say(line + (f" {fact}" if fact else ""), 3200 if fact else 2400)
+        self.game_say(line + (f" {fact}" if fact else ""), 3200 if fact else 2400)
         t["i"] += 1
         self.trivia_busy = True
         QTimer.singleShot(3400 if fact else 2600, self.trivia_next)
@@ -5846,7 +5853,8 @@ class Pet(QWidget):
             self.save_custom()
         elif best is not None:
             line += f" (Your best: {best}/{TRIVIA_ROUND})"
-        self.say(f"You got {score}/{n}! {line}", 5000)
+        self.game_say(f"You got {score}/{n}! {line}", 5000)
+        self.end_game(5200)
         if score >= n * 0.7:
             self.happy = 50
             self.jump = 24
@@ -6283,7 +6291,7 @@ class Pet(QWidget):
     def pick_idle_fun(self):
         """Pick something fun to do while idle. Returns True if she started something."""
         if (self.bed or self.streaming or self.focus_end or self.sleepy or self.reminder_active
-                or self.med_end or self.intro_step >= 0):
+                or self.med_end or self.intro_step >= 0 or self.game):
             return False
         now = datetime.now()
         h = now.hour + now.minute / 60
@@ -7097,8 +7105,31 @@ class Pet(QWidget):
     def say(self, text, ms=2200):
         if self.intro_step >= 0 and not self.intro_talking:
             return                          # during the hello tour only the tour talks
+        if getattr(self, "game", None) and not self.game_talking:
+            # mid-game: hold it (a reminder, a heads-up...) and say it once the game's over
+            self.held_msgs = (self.held_msgs + [(text, ms, time.time())])[-3:]
+            return
         self.msg = text
         self.msg_ticks = int(ms / 40)
+
+    def game_say(self, text, ms=2200):
+        self.game_talking = True
+        try:
+            self.say(text, ms)
+        finally:
+            self.game_talking = False
+
+    def start_game(self, name):
+        self.game = name
+        self.walking = False
+
+    def end_game(self, delay=3500):
+        """The game's over: back to normal, and say what she held back (if it's still fresh)."""
+        self.game = None
+        held = [m for m in self.held_msgs if time.time() - m[2] < 300]
+        self.held_msgs = []
+        for k, (text, ms, _) in enumerate(held):
+            QTimer.singleShot(delay + k * 4000, lambda t=text, m=ms: self.say(t, max(m, 3500)))
 
     def tour_say(self, text, ms):
         self.intro_talking = True
@@ -7684,7 +7715,7 @@ class Pet(QWidget):
 
     def check_med_invite(self):
         """Her daily meditation invite (and "Later" asking again)."""
-        if self.intro_step >= 0:
+        if self.intro_step >= 0 or self.game:
             return
         now = datetime.now()
         if self.med_asking:
@@ -8758,7 +8789,7 @@ class Pet(QWidget):
     def check_mode(self):
         now = time.time()
         blocked = (self.focus_end or self.sleep_hours or self.reminder_active or self.med_end
-                   or self.med_asking or self.intro_step >= 0 or not self.wander
+                   or self.med_asking or self.intro_step >= 0 or self.game or not self.wander
                    or self.dragging or self.streaming
                    or self.ball is not None or self.falling)
         win = None
@@ -9105,7 +9136,7 @@ class Pet(QWidget):
         self.update_bed()
 
         # idle chatter
-        if not self.menu_open:
+        if not self.menu_open and not self.game:
             self.idle_cd -= 1
         if self.idle_cd <= 0:
             if (not self.msg and not self.happy and not self.singing
