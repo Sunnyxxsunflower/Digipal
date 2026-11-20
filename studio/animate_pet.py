@@ -1403,6 +1403,7 @@ book_pages = outfit_mat("of_pages", "#fff3dc", 0.8)
 book_ribbon = outfit_mat("of_ribbon", "#ff7eb6", 0.6)
 # held by the bottom (her mitten in front of it), its top tipped toward you so it clears her tails
 BOOK = local_empty("BookFrame", ARM[-1], (-HAND_AT.x, 0.0, HAND_AT.z), (math.radians(28), math.radians(-8), 0))
+BOOK.scale = (1.3, 1.3, 1.3)            # big enough to make out the cover at her real size
 BW, BH, BT = 0.34, 0.42, 0.085          # width, height, thickness
 BZ = 0.2                                # book middle, above her mitten
 OUTFITS["book"] = []
