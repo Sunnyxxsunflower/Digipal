@@ -1189,7 +1189,7 @@ def bow_loop(name, length, height, depth):
     bmesh.ops.create_uvsphere(bm, u_segments=48, v_segments=24, radius=1.0)
     for v in bm.verts:
         x, y, z = v.co
-        u = (x + 1) / 2                                  # 0 at the knot, 1 at the outer end
+        u = min(1.0, max(0.0, (x + 1) / 2))              # 0 at the knot, 1 at the outer end
         h = (u ** 0.45) * ((1 - u) ** 0.25) / 0.634       # pinched, then full, then rounded
         rr = math.hypot(y, z)
         dy, dz = (y / rr, z / rr) if rr > 1e-6 else (0.0, 0.0)
