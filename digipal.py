@@ -2057,7 +2057,17 @@ class CustomizeDialog(QDialog):
 
         # initiative
         col.addWidget(self.heading("Initiative \u2694\ufe0f"))
+        orow = self.hrow()
+        orow.addWidget(QLabel("Order:"))
+        self.init_mode_buttons = {}
+        for key, label in (("roll", "By rolls \U0001F3B2"), ("manual", "My own order \u270F\ufe0f")):
+            b = self.option(label)
+            b.clicked.connect(lambda *a, k=key: self.init_set_mode(k))
+            self.init_mode_buttons[key] = b
+            orow.addWidget(b)
+        col.addLayout(orow)
         self.init_round = QLabel()
+        self.init_round.setWordWrap(True)
         self.init_round.setStyleSheet("color: #6b5f93; font-size: 11px;")
         col.addWidget(self.init_round)
         self.init_list = self.list_box(5)
@@ -2067,7 +2077,9 @@ class CustomizeDialog(QDialog):
         self.init_name.setMaxLength(24)
         self.init_name.returnPressed.connect(lambda: self.init_add())
         col.addWidget(self.init_name)
-        irow = QHBoxLayout()
+        self.init_roll_row = QWidget()
+        irow = QHBoxLayout(self.init_roll_row)
+        irow.setContentsMargins(0, 0, 0, 0)
         irow.addWidget(QLabel("Rolled"))
         self.init_roll = QSpinBox()
         self.init_roll.setRange(1, 30)
@@ -2081,11 +2093,24 @@ class CustomizeDialog(QDialog):
         self.init_mod.setToolTip("Their initiative bonus (like +2 for Dex). Digi adds it for you.")
         irow.addWidget(self.init_mod)
         irow.addStretch(1)
-        col.addLayout(irow)
-        col.addLayout(self.small_buttons([("Add", lambda *a: self.init_add()),
-                                          ("\U0001F3B2 Roll for them", self.init_d20)]))
+        col.addWidget(self.init_roll_row)
+        brow = QHBoxLayout()
+        brow.setSpacing(4)
+        for label, fn, attr in (("Add", lambda *a: self.init_add(), None),
+                                ("Add me", self.init_add_me, "init_me_btn"),
+                                ("\U0001F3B2 Roll for them", self.init_d20, "init_d20_btn")):
+            b = self.option(label)
+            b.setCheckable(False)
+            b.clicked.connect(fn)
+            brow.addWidget(b)
+            if attr:
+                setattr(self, attr, b)
+        brow.addStretch(1)
+        col.addLayout(brow)
         col.addLayout(self.small_buttons([("Next turn \u25B6", self.init_next),
-                                          ("Remove", self.init_remove),
+                                          ("\u25B2", lambda *a: self.init_move(-1)),
+                                          ("\u25BC", lambda *a: self.init_move(1))]))
+        col.addLayout(self.small_buttons([("Remove", self.init_remove),
                                           ("Clear all", self.init_clear)]))
 
         # notes
@@ -2160,19 +2185,33 @@ class CustomizeDialog(QDialog):
     def refresh_init(self):
         ini = self.pet.dnd_init
         self.init_list.clear()
+        manual = ini.get("manual", False)
+        mine = self.pet.my_char_names()
         for i, e in enumerate(ini["order"]):
             mark = "\u25B6 " if i == ini["turn"] else "    "
-            it = QListWidgetItem(mark + init_label(e))
+            text = f"{i + 1}.  {e[0]}" if manual else init_label(e)
+            if e[0].lower() in mine:
+                text += "  \u2B50 you"
+            it = QListWidgetItem(mark + text)
             if i == ini["turn"]:
                 f = it.font()
                 f.setBold(True)
                 it.setFont(f)
             self.init_list.addItem(it)
+        for k, b in self.init_mode_buttons.items():
+            b.setChecked(k == ("manual" if manual else "roll"))
+        self.init_roll_row.setVisible(not manual)
+        self.init_d20_btn.setVisible(not manual)
+        me = self.pet.my_char_name()
+        self.init_me_btn.setVisible(bool(me))
+        self.init_me_btn.setText(f"Add me ({me})" if me else "Add me")
         if not ini["order"]:
-            it = QListWidgetItem("(roll for initiative!)")
+            it = QListWidgetItem("(add everyone in the order the GM calls them)" if manual
+                                 else "(roll for initiative!)")
             it.setFlags(Qt.NoItemFlags)
             self.init_list.addItem(it)
-            self.init_round.setText("Add everyone with their roll; Digi keeps them in order.")
+            self.init_round.setText("Add each name in turn order. \u25B2 \u25BC move someone."
+                                    if manual else "Add everyone with their roll; Digi keeps them in order.")
         else:
             self.init_round.setText(f"Round {ini['round']} \u00b7 {self.pet.dnd_turn_name()}'s turn")
 
@@ -2228,8 +2267,11 @@ class CustomizeDialog(QDialog):
         ini = self.pet.dnd_init
         o = ini["order"]
         cur = o[ini["turn"] % len(o)] if o else None
-        o.append(init_entry(name, roll, mod))
-        o.sort(key=lambda e: (-e[1], -e[2]))     # highest first; a tie goes to the bigger modifier
+        if ini.get("manual"):
+            o.append(init_entry(name, 0, 0))     # your own order: they go at the end
+        else:
+            o.append(init_entry(name, roll, mod))
+            o.sort(key=lambda e: (-e[1], -e[2]))     # highest first; a tie goes to the bigger modifier
         if cur is not None:                              # keep the turn on whoever had it
             ini["turn"] = next(i for i, e in enumerate(o) if e is cur)
         self.init_name.clear()
@@ -2237,6 +2279,36 @@ class CustomizeDialog(QDialog):
         self.init_mod.setValue(0)
         self.pet.save_custom()
         self.pet.dnd_views_refresh()
+
+    def init_set_mode(self, mode):
+        ini = self.pet.dnd_init
+        ini["manual"] = mode == "manual"
+        if not ini["manual"] and ini["order"]:          # back to rolls: sort by them again
+            cur = ini["order"][ini["turn"] % len(ini["order"])]
+            ini["order"].sort(key=lambda e: (-e[1], -e[2]))
+            ini["turn"] = next(i for i, e in enumerate(ini["order"]) if e is cur)
+        self.pet.save_custom()
+        self.pet.dnd_views_refresh()
+
+    def init_add_me(self):
+        me = self.pet.my_char_name()
+        if me:
+            self.init_name.setText(me)
+            self.init_add()
+
+    def init_move(self, step):
+        i = self.init_list.currentRow()
+        ini = self.pet.dnd_init
+        o = ini["order"]
+        j = i + step
+        if i < 0 or i >= len(o) or not 0 <= j < len(o):
+            return
+        cur = o[ini["turn"] % len(o)]
+        o[i], o[j] = o[j], o[i]
+        ini["turn"] = next(k for k, e in enumerate(o) if e is cur)    # the turn stays with that person
+        self.pet.save_custom()
+        self.pet.dnd_views_refresh()
+        self.init_list.setCurrentRow(j)
 
     def init_d20(self):
         name = self.init_name.text().strip()
@@ -2272,7 +2344,8 @@ class CustomizeDialog(QDialog):
             return
         if QMessageBox.question(self, "Clear initiative",
                                 "Clear everyone from initiative? (Combat's over!)") == QMessageBox.Yes:
-            self.pet.dnd_init = {"order": [], "turn": 0, "round": 1}
+            self.pet.dnd_init = {"order": [], "turn": 0, "round": 1,
+                                 "manual": self.pet.dnd_init.get("manual", False)}
             self.pet.save_custom()
             self.pet.dnd_views_refresh()
 
@@ -3860,7 +3933,7 @@ class Pet(QWidget):
         self.dnd_days = list(DND_DAYS)    # every day with a game (kept in step with dnd_games)
         self.dnd_games = []               # your D&D games (Customize -> D&D)
         self.dnd_opts = {"use_name": True, "dress": True}
-        self.dnd_init = {"order": [], "turn": 0, "round": 1}   # initiative: [[name, roll], ...]
+        self.dnd_init = {"order": [], "turn": 0, "round": 1, "manual": False}   # [[name, total, mod, roll]]
         self.dnd_said = set()             # heads-ups already given
         self.dnd_cache = (0.0, None)
         self.birthdays = []               # [{"name", "month", "day"}] she reminds you of
@@ -6895,7 +6968,7 @@ class Pet(QWidget):
                     order.append([str(e[0])[:24], int(e[1]), 0, int(e[1])])
                 else:
                     order.append([str(e[0])[:24], int(e[1]), int(e[2]), int(e[3])])
-            self.dnd_init = {"order": order[:30],
+            self.dnd_init = {"order": order[:30], "manual": bool(ini.get("manual", False)),
                              "turn": int(ini.get("turn", 0)) if order else 0,
                              "round": max(1, int(ini.get("round", 1)))}
         self.dnd_sync_days()
@@ -7943,15 +8016,30 @@ class Pet(QWidget):
         self.dnd_views_refresh()
         self.dnd_announce_turn()
 
+    def my_char_names(self):
+        return {g["char"].lower() for g in self.dnd_games if g["char"] and g["role"] != "dm"}
+
+    def my_char_name(self):
+        """Your character in the game that's on now (or your first character)."""
+        s = self.dnd_now()
+        if s and s[0]["char"] and s[0]["role"] != "dm":
+            return s[0]["char"]
+        return next((g["char"] for g in self.dnd_games if g["char"] and g["role"] != "dm"), "")
+
     def dnd_announce_turn(self):
         who = self.dnd_turn_name()
         if not who:
             return
-        mine = {g["char"].lower() for g in self.dnd_games if g["char"]}
+        o = self.dnd_init["order"]
+        mine = self.my_char_names()
+        nxt = o[(self.dnd_init["turn"] + 1) % len(o)][0] if len(o) > 1 else None
+        up_next = nxt is not None and nxt.lower() in mine and who.lower() not in mine
         rnd = self.dnd_init["round"]
         if who.lower() in mine:
             self.say(f"Your turn, {who}! You've got this! \u2694\ufe0f", 3500)
             self.happy = 30
+        elif up_next:
+            self.say(f"{who}'s turn! You're up next, {nxt}~ get ready! \U0001F3B2", 3500)
         elif self.dnd_init["turn"] == 0:
             self.say(f"Round {rnd}! {who} goes first~", 3000)
         else:
