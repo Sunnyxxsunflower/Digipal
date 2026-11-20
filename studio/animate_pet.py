@@ -2036,20 +2036,18 @@ def tuck_hair(hat_objs, margin=0.03):
                     a0, a1 = hwi @ HEAD_C, hwi @ p
                     d = a1 - a0
                     hit = tree.ray_cast(a0, d.normalized(), d.length) if d.length > 1e-6 else (None,)
-                    if hit[0] is None or d.length - hit[3] <= margin:
+                    if hit[0] is None:
                         continue
-                    # it pokes out through the hat: press it flat against the hat, on whichever
-                    # side the hat hides from you (just behind the brim, or just inside the crown).
-                    # The hair stays one smooth piece (no cut edges, so no jagged outlines), and
-                    # where the hair goes into the hat stays the smooth curve Blender draws.
-                    # Only if neither side is hidden does that little bit get snipped.
-                    dn = d.normalized()
-                    for q in (a0 + dn * (hit[3] + margin), a0 + dn * (hit[3] - margin)):
-                        w = hw @ q
-                        if hidden_by_hat(w):
+                    # it pokes out through the hat. Where the hat hides that spot from you (behind
+                    # the brim), press it flat just behind the hat: the hair stays one smooth piece
+                    # (no cut edges, no jagged outlines) and where it goes into the hat stays the
+                    # smooth curve Blender draws. Where you'd see it (on the side of the crown),
+                    # snip it off instead.
+                    w = hw @ (a0 + d.normalized() * (hit[3] + margin))
+                    if hidden_by_hat(w):
+                        if d.length - hit[3] > margin:
                             v.co = mwi @ w
                             moved += 1
-                            break
                     else:
                         cut.append(v)
                     break
