@@ -1108,46 +1108,74 @@ o = made()
 o.scale = (1, 1, 0.6)
 OUTFITS["beret"].append(hat_part(o, gold_pin, PIN, (0, 0, 0.03)))               # the pin
 
-# bunny ears: the left one stands up, the right one folds over to the side near the top
+# bunny ears, sculpted as one smooth piece each (not stacked balls): narrow where they meet her
+# head, wide in the middle, a round tip, a soft cupped front with the pink inside, curving back a
+# little. The left one stands up; the right one bends over outward partway up, in one soft fold.
 bunny_white = outfit_mat("of_bunny", "#fbf8ff", 0.8)
+
+
+def bunny_ear(name, side, fold=0.0, length=0.86, rings=72, around=40):
+    """fold: how far the top bends over sideways (degrees, toward `side`)."""
+    import bmesh
+    bm = bmesh.new()
+    ring_verts, ring_s = [], []
+    pos = Vector((0, 0, -0.06))                 # starts a little inside her head/hair
+    ds = length / rings
+    for k in range(rings + 1):
+        sk = min(k / rings, 0.995)
+        u = min(1.0, max(0.0, (sk - 0.5) / 0.14)) if fold else 0.0
+        th = math.radians(fold) * u * u * (3 - 2 * u)   # bend angle so far (a soft fold)
+        d = Vector((side * math.sin(th), 0.12 * sk, math.cos(th))).normalized()
+        xa = Vector((math.cos(th), 0, -side * math.sin(th)))          # across the ear
+        ya = d.cross(xa).normalized() * (-1 if d.cross(xa).y < 0 else 1)  # front-to-back
+        cap = math.sqrt(max(0.0, 1 - ((sk - 0.7) / 0.3) ** 2)) if sk > 0.7 else 1.0
+        w = (0.08 + 0.07 * math.sin(math.pi * sk * 0.85)) * cap      # width
+        t = (0.06 - 0.02 * sk) * cap                                  # thickness
+        cup = 0.045 * math.sin(math.pi * sk) ** 0.7 * cap             # how deep the front cups in
+        ring = []
+        for j in range(around):
+            ph = 2 * math.pi * j / around
+            x = w * math.cos(ph)
+            y = t * math.sin(ph)
+            if y < 0 and w > 1e-6:                  # the front: cupped in the middle
+                y += cup * (1 - (x / w) ** 2)
+            ring.append(bm.verts.new(pos + xa * x + ya * y))
+        ring_verts.append(ring)
+        ring_s.append(sk)
+        pos = pos + d * ds
+    pink = set()
+    for k in range(rings):
+        a, b = ring_verts[k], ring_verts[k + 1]
+        for j in range(around):
+            j2 = (j + 1) % around
+            f = bm.faces.new((a[j], a[j2], b[j2], b[j]))
+            ph = 2 * math.pi * (j + 0.5) / around
+            sm = (ring_s[k] + ring_s[k + 1]) / 2
+            if math.sin(ph) < -0.3 and abs(math.cos(ph)) < 0.72 and 0.1 < sm < 0.88:
+                f.material_index = 1                # the pink inside of the ear
+    for ring, s_ in ((ring_verts[0], True), (ring_verts[-1], False)):   # close both ends
+        c = bm.verts.new(sum((v.co for v in ring), Vector()) / len(ring))
+        for j in range(around):
+            j2 = (j + 1) % around
+            bm.faces.new((ring[j2], ring[j], c) if s_ else (ring[j], ring[j2], c))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    return o
+
+
 for sx, lean in ((-1, 12), (1, 16)):
     ang = math.radians(16) * sx
     r = 0.5
     root = empty("BunnyEar%d" % sx, (r * math.sin(ang), 0.02, 2.015 + r * math.cos(ang)), HEAD)
     root.rotation_euler = (0, math.radians(lean) * sx, 0)
-    if sx < 0:
-        bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
-        o = made()
-        o.scale = (0.14, 0.07, 0.43)
-        OUTFITS["bunny"].append(hat_part(o, bunny_white, root, (0, 0, 0.36)))
-        bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
-        o = made()
-        o.scale = (0.075, 0.03, 0.3)
-        OUTFITS["bunny"].append(hat_part(o, ear_in, root, (0, -0.05, 0.38)))
-        continue
-    # lower half of the folding ear
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
-    o = made()
-    o.scale = (0.14, 0.07, 0.3)
-    OUTFITS["bunny"].append(hat_part(o, bunny_white, root, (0, 0, 0.28)))
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
-    o = made()
-    o.scale = (0.075, 0.03, 0.2)
-    OUTFITS["bunny"].append(hat_part(o, ear_in, root, (0, -0.05, 0.3)))
-    # the fold: a soft round knuckle, then the top half bending over outward and down a bit
-    hinge = local_empty("BunnyHinge", root, (0, 0, 0.5), (0, math.radians(72), 0))
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
-    o = made()
-    o.scale = (0.135, 0.068, 0.11)
-    OUTFITS["bunny"].append(hat_part(o, bunny_white, hinge, (0, 0, 0)))
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1)
-    o = made()
-    o.scale = (0.13, 0.065, 0.2)
-    OUTFITS["bunny"].append(hat_part(o, bunny_white, hinge, (0, 0, 0.16)))
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=1)
-    o = made()
-    o.scale = (0.065, 0.028, 0.13)
-    OUTFITS["bunny"].append(hat_part(o, ear_in, hinge, (0, -0.045, 0.18)))
+    o = bunny_ear("BunnyEarMesh%d" % sx, sx, fold=0.0 if sx < 0 else 105.0)
+    o = hat_part(o, bunny_white, root, (0, 0, 0))
+    o.data.materials.append(ear_in)
+    OUTFITS["bunny"].append(o)
 
 # round glasses: two gold rims over her eyes and a little bridge
 gold = outfit_mat("of_gold", "#e3b64e", 0.35)
@@ -1270,6 +1298,9 @@ bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.036)
 o = made()
 o.scale = (1, 1, 1.25)
 OUTFITS["bow"].append(hat_part(o, gold, BOW, (0.27, -0.21, 0.1)))         # hangs below the right loop
+# preview only: the same bow with just the big back loops ("bow_single"), to compare
+if "bow_single" in (sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []):
+    OUTFITS["bow_single"] = [o for o in OUTFITS["bow"] if not o.name.startswith("BowFront")]
 
 
 # star clip on the right side, above her ear
