@@ -220,6 +220,197 @@ RPS_WIN = ["I win! Hehe~", "Yay, I got you!", "Victory! \u2728", "Ha! Better luc
 RPS_LOSE = ["Aww, you got me!", "Nooo~ you win this one!", "Hmph... nice one!", "You're too good!"]
 RPS_TIE = ["Same! Great minds~", "A tie! Again!", "Jinx! \U0001F440"]
 
+# trivia: (question, right answer, wrong, wrong, wrong[, fun fact]). Answers stay short: they're buttons.
+TRIVIA = {
+    "anime": [
+        ("Which studio made Spirited Away?", "Studio Ghibli", "Toei Animation", "Madhouse", "Kyoto Animation"),
+        ("Who directed Spirited Away?", "Hayao Miyazaki", "Makoto Shinkai", "Mamoru Hosoda", "Satoshi Kon"),
+        ("Who directed Your Name?", "Makoto Shinkai", "Hayao Miyazaki", "Mamoru Hosoda", "Hideaki Anno"),
+        ("What is Pikachu's type?", "Electric", "Fire", "Normal", "Psychic"),
+        ("What's Ash's hometown in Pokémon?", "Pallet Town", "Viridian City", "Cerulean City", "Pewter City"),
+        ("In Naruto, which village is Naruto from?", "Hidden Leaf", "Hidden Sand", "Hidden Mist", "Hidden Cloud",
+         "Its other name is Konoha."),
+        ("In One Piece, what does Luffy want to become?", "King of the Pirates", "A Marine admiral",
+         "The best swordsman", "The greatest cook"),
+        ("How many Dragon Balls summon Shenron?", "7", "5", "9", "12"),
+        ("Who created Sailor Moon?", "Naoko Takeuchi", "Rumiko Takahashi", "CLAMP", "Akira Toriyama"),
+        ("What is Sailor Moon's real name?", "Usagi Tsukino", "Ami Mizuno", "Rei Hino", "Minako Aino"),
+        ("What does Tuxedo Mask throw?", "A rose", "A playing card", "A star", "A sword"),
+        ("In My Neighbor Totoro, what do the girls ride?", "The Catbus", "A dragon", "A paper plane", "A broom"),
+        ("What's the name of Kiki's black cat?", "Jiji", "Luna", "Artemis", "Kero"),
+        ("In Death Note, which Shinigami drops the notebook?", "Ryuk", "Rem", "Light", "L"),
+        ("In Fullmetal Alchemist, Al's soul is bound to...", "A suit of armor", "A doll", "A sword", "A cat"),
+        ("What's Eren's last name in Attack on Titan?", "Yeager", "Ackerman", "Arlert", "Braun"),
+        ("Cardcaptor Sakura's little guardian beast is...", "Kero", "Mokona", "Luna", "Jiji",
+         "His true form is Cerberus."),
+        ("Which way is manga usually read in Japan?", "Right to left", "Left to right", "Bottom to top",
+         "Back page first"),
+        ("What is Deku's quirk in My Hero Academia?", "One For All", "All For One", "Half-Cold Half-Hot",
+         "Explosion"),
+        ("What's Tanjiro's sister's name in Demon Slayer?", "Nezuko", "Kanao", "Shinobu", "Mitsuri"),
+        ("Which Eva unit does Shinji pilot?", "Unit-01", "Unit-00", "Unit-02", "Unit-13"),
+        ("What's Spike's ship in Cowboy Bebop?", "Swordfish II", "Bebop", "Red Tail", "Hammerhead"),
+        ("In Fruits Basket, a hugged Sohma turns into...", "An animal", "A ghost", "A statue",
+         "A cloud of smoke"),
+        ("In Inuyasha, Kagome travels through...", "An old well", "A mirror", "A closet", "A train tunnel"),
+        ("In Spy x Family, Anya can...", "Read minds", "See the future", "Fly", "Talk to dogs",
+         "Bond is the one who sees the future!"),
+    ],
+    "games": [
+        ("What's the hero's name in The Legend of Zelda?", "Link", "Zelda", "Ganon", "Epona",
+         "Zelda is the princess!"),
+        ("What's the name of Link's horse?", "Epona", "Roach", "Agro", "Shadowfax"),
+        ("Who is Mario's brother?", "Luigi", "Wario", "Toad", "Yoshi"),
+        ("Which item makes Mario big?", "Super Mushroom", "Fire Flower", "Starman", "1-Up"),
+        ("What's the town in Stardew Valley?", "Pelican Town", "Mineral Town", "Zuzu City", "Oakridge",
+         "Zuzu City is the big city you leave behind."),
+        ("Who runs the general store in Stardew Valley?", "Pierre", "Gus", "Clint", "Willy"),
+        ("What's the town in Rune Factory 4?", "Selphia", "Alvarna", "Mineral Town", "Pelican Town"),
+        ("Which Minecraft mob is green and explodes?", "Creeper", "Zombie", "Enderman", "Slime"),
+        ("In Animal Crossing, who sells you a house?", "Tom Nook", "K.K. Slider", "Isabelle", "Blathers"),
+        ("What does Sonic collect?", "Rings", "Coins", "Stars", "Gems"),
+        ("How does Kirby copy powers?", "By inhaling enemies", "Eating mushrooms", "Collecting stars",
+         "Touching gems"),
+        ("Which Pac-Man ghost is red?", "Blinky", "Pinky", "Inky", "Clyde"),
+        ("Where was Tetris created?", "The Soviet Union", "Japan", "The USA", "Finland"),
+        ("Who is the hero of Final Fantasy VII?", "Cloud Strife", "Squall", "Tidus", "Zidane"),
+        ("In Undertale, who is Papyrus's brother?", "Sans", "Toriel", "Asgore", "Flowey"),
+        ("Which Kanto starter is Grass type?", "Bulbasaur", "Charmander", "Squirtle", "Pikachu"),
+        ("Which Pokémon does a Water Stone make from Eevee?", "Vaporeon", "Jolteon", "Flareon", "Glaceon"),
+        ("In Among Us, the bad guys are called...", "Impostors", "Traitors", "Werewolves", "Spies"),
+        ("In Portal, the cake is a...", "Lie", "Trap", "Gift", "Myth"),
+        ("Who is the hero of Halo?", "Master Chief", "Commander Shepard", "Marcus Fenix", "Doomguy"),
+        ("What's the team called in Persona 5?", "Phantom Thieves", "Investigation Team", "SEES",
+         "Shadow Operatives"),
+        ("Hollow Knight takes place in...", "Hallownest", "Hyrule", "Lordran", "Rapture"),
+        ("What does NPC stand for?", "Non-player character", "New player chat", "Next power card",
+         "No pause control"),
+        ("Which company makes the PlayStation?", "Sony", "Nintendo", "Microsoft", "Sega"),
+        ("Who is the hero of Kingdom Hearts?", "Sora", "Riku", "Roxas", "Ventus"),
+    ],
+    "tabletop": [
+        ("Which die do most D&D attack rolls use?", "d20", "d12", "d10", "d6"),
+        ("A natural 20 on an attack is a...", "Critical hit", "Fumble", "Saving throw", "Short rest"),
+        ("How many ability scores does D&D have?", "6", "5", "7", "8"),
+        ("Which one is NOT a D&D ability score?", "Luck", "Wisdom", "Charisma", "Constitution"),
+        ("With advantage, you...", "Roll 2, keep higher", "Roll 2, keep lower", "Add +5", "Reroll 1s"),
+        ("Which D&D class can Wild Shape?", "Druid", "Ranger", "Monk", "Warlock"),
+        ("Which D&D class is known for Sneak Attack?", "Rogue", "Bard", "Fighter", "Paladin"),
+        ("What size is a level 1 Bardic Inspiration die?", "d6", "d4", "d8", "d10"),
+        ("Who runs the game in D&D?", "Dungeon Master", "Keeper", "Warden", "Narrator"),
+        ("Who runs the game in Monster of the Week?", "Keeper", "Warden", "Storyteller", "Dungeon Master"),
+        ("Who runs the game in Mothership?", "Warden", "Keeper", "Overseer", "Captain"),
+        ("In Mothership, what goes up when things go wrong?", "Stress", "Sanity", "Heat", "Doom"),
+        ("In Call of Cthulhu, scary things cost you...", "Sanity", "Luck", "Charisma", "Stress"),
+        ("How do you play Thousand Year Old Vampire?", "Solo, by journaling", "In teams of 4",
+         "Only online", "With miniatures"),
+        ("What's D&D's famous floating eye monster?", "Beholder", "Mind Flayer", "Gelatinous Cube", "Mimic"),
+        ("Which monster pretends to be a treasure chest?", "Mimic", "Owlbear", "Beholder", "Kobold"),
+        ("Which D&D dragon breathes fire?", "Red", "Blue", "Green", "White"),
+        ("Which D&D dragon breathes lightning?", "Blue", "Black", "Green", "White"),
+        ("How long is a long rest in D&D 5e?", "8 hours", "1 hour", "4 hours", "24 hours"),
+        ("What spell level is a cantrip?", "Level 0", "Level 1", "Level 9", "Level 10"),
+        ("What's the highest spell level in D&D 5e?", "9th", "7th", "10th", "12th"),
+        ("How many dice are in a standard RPG set?", "7", "5", "6", "10",
+         "d4, d6, d8, d10, percentile d10, d12 and d20."),
+        ("Which die is shaped like a pyramid?", "d4", "d6", "d8", "d12"),
+        ("Who created Dungeons & Dragons?", "Gygax & Arneson", "Tolkien & Lewis", "Lee & Kirby",
+         "Lucas & Spielberg"),
+        ("When was D&D first published?", "1974", "1964", "1984", "1994"),
+        ("What's a TPK?", "Total party kill", "Top player kit", "Turn per knight", "Treasure pick key"),
+    ],
+    "books": [
+        ("Who wrote Pride and Prejudice?", "Jane Austen", "Charlotte Brontë", "Emily Brontë",
+         "Louisa May Alcott"),
+        ("What does Bilbo find in Gollum's cave?", "A ring", "A sword", "A map", "A dragon egg"),
+        ("Who wrote The Lord of the Rings?", "J.R.R. Tolkien", "C.S. Lewis", "George R.R. Martin",
+         "Terry Pratchett"),
+        ("How many March sisters are in Little Women?", "4", "3", "5", "6"),
+        ("Who wrote Frankenstein?", "Mary Shelley", "Bram Stoker", "Edgar Allan Poe", "Percy Shelley"),
+        ("Who wrote Dracula?", "Bram Stoker", "Mary Shelley", "Anne Rice", "Stephen King"),
+        ("What does Alice follow into Wonderland?", "A white rabbit", "A black cat", "A blue bird",
+         "A talking fox"),
+        ("What flower does the Little Prince love?", "A rose", "A tulip", "A sunflower", "A lily"),
+        ("How do they reach Narnia in The Lion, the Witch...?", "A wardrobe", "A painting", "A well",
+         "A train"),
+        ("Who is the captain in Moby-Dick?", "Ahab", "Nemo", "Hook", "Flint"),
+        ("Which district is Katniss from?", "District 12", "District 1", "District 4", "District 13"),
+        ("Where does Sherlock Holmes live?", "221B Baker Street", "10 Downing Street", "4 Privet Drive",
+         "12 Grimmauld Place"),
+        ("Where is Romeo and Juliet set?", "Verona", "Venice", "Rome", "Florence"),
+        ("What color is Anne of Green Gables' hair?", "Red", "Black", "Blonde", "Brown"),
+        ("Who is Percy Jackson's father?", "Poseidon", "Zeus", "Hades", "Apollo"),
+        ("Which country is The Tale of Genji from?", "Japan", "China", "Korea", "India",
+         "It's often called one of the world's first novels."),
+        ("Who is the Monkey King in Journey to the West?", "Sun Wukong", "Zhu Bajie", "Sha Wujing", "Nezha"),
+        ("What's Dorothy's dog called in The Wizard of Oz?", "Toto", "Rex", "Spot", "Benji"),
+        ("Who wrote 1984?", "George Orwell", "Aldous Huxley", "Ray Bradbury", "H.G. Wells"),
+        ("In Fahrenheit 451, what burns at 451°F?", "Paper", "Wood", "Glass", "Ice"),
+        ("What's the name of Peter Pan's fairy?", "Tinker Bell", "Silvermist", "Navi", "Fawn"),
+        ("Who wrote the book Howl's Moving Castle?", "Diana Wynne Jones", "Ursula K. Le Guin",
+         "Neil Gaiman", "Hayao Miyazaki", "Studio Ghibli made the movie later."),
+        ("Who wrote the book Kiki's Delivery Service?", "Eiko Kadono", "Hayao Miyazaki", "Naoko Takeuchi",
+         "Banana Yoshimoto"),
+        ("How many spirits visit Scrooge after Marley?", "3", "2", "4", "5"),
+        ("Who wrote A Wizard of Earthsea?", "Ursula K. Le Guin", "Diana Wynne Jones", "Tamora Pierce",
+         "Robin Hobb"),
+    ],
+    "general": [
+        ("What's the biggest planet?", "Jupiter", "Saturn", "Neptune", "Earth"),
+        ("Which planet is closest to the Sun?", "Mercury", "Venus", "Mars", "Earth"),
+        ("Which planet is called the Red Planet?", "Mars", "Venus", "Jupiter", "Mercury"),
+        ("How many legs does a spider have?", "8", "6", "10", "12"),
+        ("What's the biggest ocean?", "Pacific", "Atlantic", "Indian", "Arctic"),
+        ("What's the chemical symbol for gold?", "Au", "Ag", "Gd", "Go"),
+        ("What's the tallest animal?", "Giraffe", "Elephant", "Ostrich", "Moose"),
+        ("How many continents are there?", "7", "5", "6", "8"),
+        ("What's the fastest land animal?", "Cheetah", "Lion", "Horse", "Greyhound"),
+        ("What's the capital of Japan?", "Tokyo", "Kyoto", "Osaka", "Seoul"),
+        ("What's the biggest hot desert?", "Sahara", "Gobi", "Kalahari", "Mojave"),
+        ("Which gas do plants take in?", "Carbon dioxide", "Oxygen", "Nitrogen", "Helium"),
+        ("What do bees make honey from?", "Nectar", "Pollen", "Leaves", "Sap"),
+        ("How many hearts does an octopus have?", "3", "1", "2", "8"),
+        ("At what °F does water freeze?", "32°F", "0°F", "100°F", "212°F"),
+        ("What do pandas mostly eat?", "Bamboo", "Fish", "Berries", "Grass"),
+        ("What's a baby kangaroo called?", "Joey", "Kit", "Cub", "Calf"),
+        ("Which of these is a mammal?", "Dolphin", "Shark", "Octopus", "Salmon"),
+        ("What's the hardest natural material?", "Diamond", "Gold", "Iron", "Quartz"),
+        ("Which flower turns to follow the sun?", "Sunflower", "Rose", "Tulip", "Daisy",
+         "Young sunflowers do, anyway! \U0001F33B"),
+        ("How many days are in a leap year?", "366", "365", "364", "360"),
+        ("Which bird can't fly?", "Penguin", "Eagle", "Parrot", "Owl"),
+        ("What's the human body's biggest organ?", "Skin", "Liver", "Heart", "Brain"),
+        ("How many keys does a piano have?", "88", "76", "61", "100"),
+        ("How many colors are in a rainbow?", "7", "5", "6", "8"),
+    ],
+    "digi": [
+        ("When is Digi's birthday?", "November 14", "February 14", "October 31", "December 25"),
+        ("Who drew Digi?", "Sunny", "A robot", "Digi herself", "The dragon"),
+        ("What does Digi sit on to meditate?", "A zafu cushion", "A beanbag", "A cloud", "Her bed"),
+        ("What does Digi do when it's cold out?", "Shivers", "Dances", "Sleeps", "Sings"),
+        ("What does Digi bring out when it rains?", "An umbrella", "A raincoat", "A boat", "A bucket"),
+        ("Which is NOT one of Digi's hairstyles?", "Braids", "Twin tails", "Drill tails", "Shaggy"),
+        ("What's on Digi's dragon book cover?", "A shield with a d20", "A crown", "A cat", "A moon"),
+        ("What does Digi carry when you're a player?", "A sword", "A book", "A wand", "A lute"),
+        ("Which die does Digi roll in D&D mode?", "d20", "d6", "d8", "d100"),
+        ("What does Digi do when you take a screenshot?", "Grabs her camera", "Hides", "Waves",
+         "Falls asleep"),
+        ("Which of these is a Calm sound?", "River", "Thunder", "Fireworks", "Traffic"),
+        ("What is Digi?", "A robot girl", "A cat girl", "A ghost", "An alien"),
+        ("What happens when you boop Digi?", "She's surprised", "She sneezes", "She falls asleep",
+         "She explodes"),
+        ("Which game can you play with Digi?", "Rock, paper, scissors", "Chess", "Uno", "Mahjong"),
+    ],
+}
+TRIVIA_CATS = [("\U0001F338\nAnime", "anime"), ("\U0001F3AE\nGames", "games"), ("\U0001F409\nTabletop", "tabletop"),
+               ("\U0001F4DA\nBooks", "books"), ("\U0001F30D\nGeneral", "general"), ("\U0001F916\nDigi", "digi"),
+               ("\U0001F3B2\nMix", "mix"), ("✏️\nMine", "mine"), ("✕", "close")]
+TRIVIA_NAMES = {"anime": "Anime & manga", "games": "Video games", "tabletop": "Tabletop", "books": "Books",
+                "general": "General", "digi": "All about Digi", "mix": "Mix", "mine": "My trivia"}
+TRIVIA_ROUND = 10
+TRIVIA_RIGHT = ["Correct! ✨", "Yes!! You got it!", "Right! So smart~", "Ding ding ding! \U0001F514"]
+TRIVIA_WRONG = ["Not quite!", "Ooh, so close!", "Nope~", "Aww, not this time!"]
+
 GAMING_START = ["Game time! \U0001F3AE I'll play over here~", "Ooh, let's play together! \U0001F3AE",
                 "Player 2 ready! \U0001F3AE"]
 GAMING_END = ["GG! That was fun! \U0001F3AE", "I almost beat that level!", "Good game~ \u2665"]
@@ -333,6 +524,22 @@ DND_DM_LINES = ["Your players await, {name}! \U0001F4D6", "Time to run the game,
                 "The world is yours to tell, {name}! \U0001F409"]
 DND_END_LINES = ["Great session, {name}! Anything to jot in your notes? \U0001F4DC",
                  "That was fun! Rest up, {name}~", "What an adventure! Same time next week? \U0001F3B2"]
+
+
+def clean_trivia(t):
+    """One of your own trivia questions, checked over (or None if it's not usable)."""
+    if not isinstance(t, dict):
+        return None
+    q = str(t.get("q", "")).strip()[:90]
+    a = str(t.get("a", "")).strip()[:24]
+    wrong = []
+    for w in t.get("wrong") or []:
+        w = str(w).strip()[:24]
+        if w and w.lower() != a.lower() and w.lower() not in (x.lower() for x in wrong):
+            wrong.append(w)
+    if not q or not a or not wrong:
+        return None
+    return {"q": q, "a": a, "wrong": wrong[:3]}
 
 
 def clean_dnd_game(g):
@@ -1872,6 +2079,18 @@ class CustomizeDialog(QDialog):
         note.setStyleSheet("color: #6b5f93; font-size: 11px;")
         cl.addWidget(note)
         col.addWidget(self.cycle_box)
+
+        col.addWidget(self.heading("My trivia \u270F\ufe0f"))
+        lab = QLabel("Write your own questions (campaign lore, your channel, your stories...). "
+                     "Play them with Play \u2192 Trivia \u2192 Mine.")
+        lab.setWordWrap(True)
+        lab.setStyleSheet("color: #6b5f93; font-size: 11px;")
+        col.addWidget(lab)
+        self.trivia_list = self.list_box(4)
+        self.trivia_list.itemDoubleClicked.connect(lambda *_: self.trivia_edit())
+        col.addWidget(self.trivia_list)
+        col.addLayout(self.small_buttons([("Add", self.trivia_add), ("Change", self.trivia_edit),
+                                          ("Delete", self.trivia_delete)]))
         col.addSpacing(8)
         self.cycle_on = QCheckBox("Show cycle tracker \U0001F338")
         self.cycle_on.setStyleSheet("color: #8a80aa; font-size: 11px;")
@@ -1923,6 +2142,45 @@ class CustomizeDialog(QDialog):
         self.cycle_notify.setChecked(bool(c.get("notify", True)))
         self.cycle_notify.blockSignals(False)
         self.cycle_label.setText(pet.cycle_summary())
+        self.trivia_list.clear()
+        for t in pet.trivia_mine:
+            self.trivia_list.addItem(f"{t['q']}  \u2192  {t['a']}")
+        if not pet.trivia_mine:
+            it = QListWidgetItem("(no questions yet!)")
+            it.setFlags(Qt.NoItemFlags)
+            self.trivia_list.addItem(it)
+
+    def trivia_add(self):
+        dlg = TriviaEdit(self)
+        if dlg.exec():
+            item = dlg.result_item()
+            if item:
+                self.pet.trivia_mine.append(item)
+                self.pet.save_custom()
+                self.refresh_lists()
+
+    def trivia_edit(self):
+        i = self.trivia_list.currentRow()
+        if i < 0 or i >= len(self.pet.trivia_mine):
+            return
+        dlg = TriviaEdit(self, self.pet.trivia_mine[i])
+        if dlg.exec():
+            item = dlg.result_item()
+            if item:
+                self.pet.trivia_mine[i] = item
+                self.pet.save_custom()
+                self.refresh_lists()
+
+    def trivia_delete(self):
+        i = self.trivia_list.currentRow()
+        if i < 0 or i >= len(self.pet.trivia_mine):
+            return
+        t = self.pet.trivia_mine[i]
+        if QMessageBox.question(self, "Delete question",
+                                f"Delete this question?\n\n{t['q']}\n\u2192 {t['a']}") == QMessageBox.Yes:
+            del self.pet.trivia_mine[i]
+            self.pet.save_custom()
+            self.refresh_lists()
 
     def set_water_goal(self, n):
         self.pet.water["goal"] = n
@@ -3237,6 +3495,52 @@ class DndGameEdit(QDialog):
                                "hours": self.hours.value(), "notes": self.notes})
 
 
+class TriviaEdit(QDialog):
+    """Add or change one of your own trivia questions."""
+
+    def __init__(self, parent, item=None):
+        super().__init__(parent)
+        self.setWindowTitle("My trivia")
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        item = item or {"q": "", "a": "", "wrong": []}
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("Question"))
+        self.q = QLineEdit(item["q"])
+        self.q.setMaxLength(90)
+        self.q.setPlaceholderText("What's the name of our party's tavern?")
+        lay.addWidget(self.q)
+        lay.addWidget(QLabel("Right answer (keep it short: it goes on a button)"))
+        self.a = QLineEdit(item["a"])
+        self.a.setMaxLength(24)
+        lay.addWidget(self.a)
+        lay.addWidget(QLabel("Wrong answers (at least one)"))
+        self.wrong = []
+        for i in range(3):
+            w = QLineEdit(item["wrong"][i] if i < len(item["wrong"]) else "")
+            w.setMaxLength(24)
+            lay.addWidget(w)
+            self.wrong.append(w)
+        btns = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        ok = QPushButton("Save")
+        ok.setDefault(True)
+        cancel.clicked.connect(self.reject)
+        ok.clicked.connect(self.try_accept)
+        btns.addWidget(cancel)
+        btns.addWidget(ok)
+        lay.addLayout(btns)
+
+    def try_accept(self):
+        if self.result_item() is None:
+            QMessageBox.information(self, "My trivia",
+                                    "It needs a question, a right answer and at least one wrong answer.")
+            return
+        self.accept()
+
+    def result_item(self):
+        return clean_trivia({"q": self.q.text(), "a": self.a.text(), "wrong": [w.text() for w in self.wrong]})
+
+
 class BirthdayEdit(QDialog):
     """Add or change one birthday."""
 
@@ -3973,7 +4277,14 @@ class Pet(QWidget):
         self.rps = {"you": 0, "digi": 0, "tie": 0}   # rock-paper-scissors, all time
         self.rps_game = [0, 0]                       # this game: you, Digi
         self.rps_busy = False                        # mid "rock... paper... scissors..."
+        self.trivia = None                           # a trivia round that's going on
+        self.trivia_busy = False                     # between questions
+        self.trivia_best = {}                        # best score per category
+        self.trivia_mine = []                        # your own questions
+        self.trivia_seen = set()                     # asked lately (so they don't repeat soon)
         self.choice_big = False
+        self.choice_timeout = None
+        self.choice_pick = None
         self.choice_since = 0.0
         self.menu_open = False            # one of her right-click menus is open: she holds still
         self.sleep_hours_set = list(SLEEP_HOURS)
@@ -4914,6 +5225,7 @@ class Pet(QWidget):
         else:
             pm.addAction("Toss a ball!", self.toss_ball)
         pm.addAction("\u270A Rock, paper, scissors", self.play_rps)
+        pm.addAction("\U0001F9E0 Trivia", self.play_trivia)
         pm.addAction("Throw a bomb! \U0001F4A3", self.throw_bomb)
         dm = pm.addMenu("Roll dice")
         for sides in DICE:
@@ -5433,6 +5745,111 @@ class Pet(QWidget):
         self.say(f"{vs}  {line}\nYou {g[0]} \u00b7 Digi {g[1]}  (\u2715 to stop)", 45000)
         self.save_custom()
         self.show_choices(RPS_BUTTONS, self.rps_pick, big=True)    # ready for the next round
+
+    # ----- trivia -----
+    def play_trivia(self):
+        self.walking = False
+        cats = [c for c in TRIVIA_CATS if c[1] != "mine" or self.trivia_mine]
+        self.say("Trivia time! Pick a category~ \U0001F9E0", 45000)
+        self.show_choices(cats, self.trivia_pick_cat, big=True)
+
+    def trivia_pool(self, cat):
+        if cat == "mine":
+            return [(t["q"], t["a"], *t["wrong"]) for t in self.trivia_mine]
+        if cat == "mix":
+            return [q for qs in TRIVIA.values() for q in qs]
+        return list(TRIVIA.get(cat, []))
+
+    def trivia_pick_cat(self, cat):
+        if cat == "close":
+            self.say("Okay, another time~", 2000)
+            return
+        pool = self.trivia_pool(cat)
+        if not pool:
+            self.say("No questions there yet! Add some in Customize \u2192 Lists~", 3500)
+            return
+        fresh = [q for q in pool if q[0] not in self.trivia_seen]    # not asked lately first
+        old = [q for q in pool if q[0] in self.trivia_seen]
+        random.shuffle(fresh)
+        random.shuffle(old)
+        if len(fresh) < min(TRIVIA_ROUND, len(pool)):     # running out: start a new lap after this
+            self.trivia_seen -= {q[0] for q in pool}
+        qs = (fresh + old)[:TRIVIA_ROUND]
+        self.trivia = {"cat": cat, "qs": qs, "i": 0, "score": 0, "streak": 0}
+        self.trivia_ask()
+
+    def trivia_ask(self):
+        t = self.trivia
+        if not t:
+            return
+        q = t["qs"][t["i"]]
+        self.trivia_seen.add(q[0])
+        answers = [q[1]] + [a for a in q[2:5] if a]
+        random.shuffle(answers)
+        t["answers"] = answers
+        buttons = [(a.replace("&", "&&"), str(k)) for k, a in enumerate(answers)] + [("\u2715", "close")]
+        self.say(f"Q{t['i'] + 1}/{len(t['qs'])}: {q[0]}", 120000)
+        self.show_choices(buttons, self.trivia_answer, timeout=120)
+
+    def trivia_answer(self, key):
+        t = self.trivia
+        if not t:
+            return
+        if key == "close":
+            done = t["i"]
+            self.trivia = None
+            self.say(f"Okay! You got {t['score']}/{done} \u2665" if done else "Okay, another time~", 3000)
+            return
+        q = t["qs"][t["i"]]
+        right = t["answers"][int(key)] == q[1]
+        fact = q[5] if len(q) > 5 else ""
+        if right:
+            t["score"] += 1
+            t["streak"] += 1
+            line = random.choice(TRIVIA_RIGHT)
+            if t["streak"] >= 3:
+                line = f"{t['streak']} in a row?! \U0001F525"
+            self.happy = 40
+            self.jump = 20
+        else:
+            t["streak"] = 0
+            line = f"{random.choice(TRIVIA_WRONG)} It's {q[1]}."
+            self.boop_until = time.time() + 1.2
+        self.say(line + (f" {fact}" if fact else ""), 3200 if fact else 2400)
+        t["i"] += 1
+        self.trivia_busy = True
+        QTimer.singleShot(3400 if fact else 2600, self.trivia_next)
+
+    def trivia_next(self):
+        self.trivia_busy = False
+        t = self.trivia
+        if not t:
+            return
+        if t["i"] < len(t["qs"]):
+            self.trivia_ask()
+            return
+        n, score, cat = len(t["qs"]), t["score"], t["cat"]
+        self.trivia = None
+        if score == n:
+            line = "Perfect score!! \U0001F3C6"
+        elif score >= n * 0.7:
+            line = "Amazing! \u2728"
+        elif score >= n * 0.4:
+            line = "Nice job!"
+        else:
+            line = "Good try~ we'll study together! \U0001F4DA"
+        best = self.trivia_best.get(cat)
+        if n == TRIVIA_ROUND and (best is None or score > best):
+            if best is not None:
+                line += f" New best for {TRIVIA_NAMES[cat]}!"
+            self.trivia_best[cat] = score
+            self.save_custom()
+        elif best is not None:
+            line += f" (Your best: {best}/{TRIVIA_ROUND})"
+        self.say(f"You got {score}/{n}! {line}", 5000)
+        if score >= n * 0.7:
+            self.happy = 50
+            self.jump = 24
 
     def show_modes(self):
         self.show_choices(MODE_BUTTONS, self.pick_mode, active=self.current_mode(), big=True)
@@ -7002,7 +7419,8 @@ class Pet(QWidget):
                            "med_guide": self.med_guide, "med_time": self.med_time,
                            "med_asked_day": self.med_asked_day, "med_sound": self.med_sound,
                            "med_volume": self.med_volume, "med_chime": self.med_chime,
-                           "intro_done": self.intro_done, "rps": self.rps}, f)
+                           "intro_done": self.intro_done, "rps": self.rps,
+                           "trivia_best": self.trivia_best, "trivia_mine": self.trivia_mine}, f)
         except Exception:
             pass
 
@@ -7026,6 +7444,11 @@ class Pet(QWidget):
             # game nights from before the D&D tab: one game, 7pm on those days
             self.dnd_games = [clean_dnd_game({"title": "Game night", "days": self.dnd_days,
                                               "start": "19:00", "hours": 4})]
+        if isinstance(d.get("trivia_mine"), list):
+            self.trivia_mine = [t for t in (clean_trivia(x) for x in d["trivia_mine"]) if t][:300]
+        if isinstance(d.get("trivia_best"), dict):
+            self.trivia_best = {k: int(v) for k, v in d["trivia_best"].items()
+                                if k in TRIVIA_NAMES and isinstance(v, (int, float))}
         if isinstance(d.get("rps"), dict):
             for k in ("you", "digi", "tie"):
                 if isinstance(d["rps"].get(k), int):
@@ -7234,7 +7657,7 @@ class Pet(QWidget):
         self.med_mid_done = False
         QTimer.singleShot(1200, lambda: self.play_chime("start") if self.med_end else None)
 
-    def show_choices(self, options, on_pick, active=None, big=False):
+    def show_choices(self, options, on_pick, active=None, big=False, timeout=None):
         if self.choice_bar is not None:
             try:
                 self.choice_bar.hide()
@@ -7247,6 +7670,8 @@ class Pet(QWidget):
         self.choice_bar = ChoiceBar(self, options, picked, active, big)
         self.choice_big = big
         self.choice_since = time.time()
+        self.choice_timeout = timeout or (45 if big else None)
+        self.choice_pick = picked
 
     def close_choices(self):
         if self.choice_bar is not None:
@@ -8515,11 +8940,14 @@ class Pet(QWidget):
             return
         if self.med_end:
             return                              # she stays put on her cushion
-        if self.menu_open or self.rps_busy:
+        if self.menu_open or self.rps_busy or self.trivia_busy:
             return                              # her menu is open (or a game): hold still
         if self.choice_bar is not None:
-            if self.choice_big and time.time() - self.choice_since > 45:
-                self.close_choices()            # the Modes buttons, left alone: put them away
+            limit = getattr(self, "choice_timeout", None)
+            if limit and time.time() - self.choice_since > limit:
+                pick = self.choice_pick         # buttons left alone: put them away ("close")
+                self.close_choices()
+                pick("close")
             else:
                 return                          # buttons under her: hold still so you can click them
         if self.activity:
