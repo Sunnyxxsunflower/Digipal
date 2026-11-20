@@ -3241,6 +3241,7 @@ class Pet(QWidget):
         self.nickname = ""                # what she calls you (empty = no name)
         self.intro_done = False           # the first-time hello tour (brand new Digis only)
         self.intro_step = -1
+        self.intro_talking = False
         self.place = None                 # {"name", "lat", "lon"} for the weather
         self.units = "F"
         self.dnd_days = list(DND_DAYS)
@@ -3658,6 +3659,13 @@ class Pet(QWidget):
 
     # ---------- the first-time tour: she introduces herself and shows you around ----------
     def start_intro(self):
+        # drop whatever she was doing: the tour has her full attention
+        if self.activity:
+            self.end_activity(quiet=True)
+        if self.ball:
+            self.end_ball()
+        if self.mode == "peek":
+            self.set_mode("wander", 30)
         self.intro_step = 0
         self.happy = 40
         self.jump = 20
@@ -3669,10 +3677,10 @@ class Pet(QWidget):
             return
         text, buttons = INTRO_STEPS[i]
         if text == "NAME":
-            self.say("First things first... what should I call you? \U0001F60A", 120000)
+            self.tour_say("First things first... what should I call you? \U0001F60A", 120000)
             QTimer.singleShot(400, self.intro_ask_name)
             return
-        self.say(text, 120000)
+        self.tour_say(text, 120000)
         if i < len(INTRO_STEPS) - 1:
             buttons = buttons + [("Skip tour", "skip")]
         self.show_choices(buttons, self.intro_pick)
@@ -3688,9 +3696,9 @@ class Pet(QWidget):
         if name:
             self.nickname = name
             self.save_custom()
-            self.say(f"{name}! What a lovely name! Nice to meet you~ \U0001F49C", 3500)
+            self.tour_say(f"{name}! What a lovely name! Nice to meet you~ \U0001F49C", 3500)
         else:
-            self.say("That's okay! You can tell me later in Customize \u2192 Me~", 3500)
+            self.tour_say("That's okay! You can tell me later in Customize \u2192 Me~", 3500)
         self.happy = 40
         self.intro_step += 1
         QTimer.singleShot(3600, self.intro_show)
@@ -5047,7 +5055,7 @@ class Pet(QWidget):
     def pick_idle_fun(self):
         """Pick something fun to do while idle. Returns True if she started something."""
         if (self.bed or self.streaming or self.focus_end or self.sleepy or self.reminder_active
-                or self.med_end):
+                or self.med_end or self.intro_step >= 0):
             return False
         now = datetime.now()
         h = now.hour + now.minute / 60
@@ -5861,8 +5869,15 @@ class Pet(QWidget):
 
     # ---------- behavior ----------
     def say(self, text, ms=2200):
+        if self.intro_step >= 0 and not self.intro_talking:
+            return                          # during the hello tour only the tour talks
         self.msg = text
         self.msg_ticks = int(ms / 40)
+
+    def tour_say(self, text, ms):
+        self.intro_talking = True
+        self.say(text, ms)
+        self.intro_talking = False
 
     def poke(self):
         if self.mode == "peek":
@@ -6392,6 +6407,8 @@ class Pet(QWidget):
 
     def check_med_invite(self):
         """Her daily meditation invite (and "Later" asking again)."""
+        if self.intro_step >= 0:
+            return
         now = datetime.now()
         if self.med_asking:
             if time.time() - self.med_asked_since > MED_ANSWER_WAIT:
@@ -7270,7 +7287,8 @@ class Pet(QWidget):
     def check_mode(self):
         now = time.time()
         blocked = (self.focus_end or self.sleep_hours or self.reminder_active or self.med_end
-                   or self.med_asking or not self.wander or self.dragging or self.streaming
+                   or self.med_asking or self.intro_step >= 0 or not self.wander
+                   or self.dragging or self.streaming
                    or self.ball is not None or self.falling)
         win = None
         if self.windows_enabled and HAS_WINLIST:
@@ -7443,7 +7461,7 @@ class Pet(QWidget):
             return
         if self.pose_now() and not self.activity:
             return
-        if self.med_asking:
+        if self.med_asking or self.intro_step >= 0:      # asking you something: in the middle
             tx = self.area.center().x() - 110
             ty = self.area.center().y() - 120
             if abs(self.px - tx) > 2 or abs(self.py - ty) > 2:
