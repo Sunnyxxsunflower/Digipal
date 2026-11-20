@@ -1543,17 +1543,17 @@ for sx in (-1, 1):
     o.scale = (0.075, 0.11, 0.06)
     pad.append(hat_part(o, pad_body, PAD, (0.13 * sx, -0.08, -0.01), (0, 0, math.radians(-14 * sx))))  # grips
     bpy.ops.mesh.primitive_cylinder_add(vertices=20, radius=0.022, depth=0.03)
-    pad.append(hat_part(made(), pad_dark, PAD, (0.045 * sx, -0.035, 0.035)))  # the two sticks
+    pad.append(hat_part(made(), pad_dark, PAD, (0.045 * sx, 0.03, 0.035)))    # the two sticks (top)
 for sz in ((0.055, 0.017), (0.017, 0.055)):
     bpy.ops.mesh.primitive_cube_add(size=1)
     o = made()
     o.scale = (sz[0], sz[1], 0.014)
-    pad.append(hat_part(o, pad_dark, PAD, (-0.095, 0.022, 0.034)))           # the d-pad
+    pad.append(hat_part(o, pad_dark, PAD, (-0.095, -0.02, 0.034)))           # the d-pad (bottom)
 for col, (dx, dy) in zip(("#f7a8c8", "#8fdcc3", "#ffd970", "#8cc8f2"),
                          ((0, 0.026), (0.026, 0), (-0.026, 0), (0, -0.026))):
     bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.013, depth=0.016)
     pad.append(hat_part(made(), prop_mat("pad_btn" + col, col, 0.35), PAD,
-                        (0.095 + dx, 0.022 + dy, 0.034)))                   # the four buttons
+                        (0.095 + dx, -0.02 + dy, 0.034)))                   # the four buttons (bottom)
 PROPS2["gamepad"] = pad
 
 # umbrella in her right hand: a half-dome canopy with ribs and a scalloped rim,
