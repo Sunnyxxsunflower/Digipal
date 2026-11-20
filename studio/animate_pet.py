@@ -1397,8 +1397,8 @@ gold_trim = outfit_mat("of_gold", "#f2c14e", 0.35)
 
 # -- the dragon book: purple cover, gold border and a gold dragon with spread wings, cream pages,
 #    a pink ribbon bookmark. Her left hand (on your left) holds it by the bottom of the spine.
-book_cover = outfit_mat("of_bookcover", "#5e3d8f", 0.55)
-book_spine = outfit_mat("of_bookspine", "#462c6e", 0.55)
+book_cover = outfit_mat("of_bookcover", "#696293", 0.55)      # matches Nancy's cover art
+book_spine = outfit_mat("of_bookspine", "#4e4873", 0.55)
 book_pages = outfit_mat("of_pages", "#fff3dc", 0.8)
 book_ribbon = outfit_mat("of_ribbon", "#ff7eb6", 0.6)
 # held by the bottom (her mitten in front of it), its top tipped toward you so it clears her tails
