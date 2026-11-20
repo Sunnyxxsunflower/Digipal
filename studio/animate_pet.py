@@ -1401,7 +1401,7 @@ book_cover = outfit_mat("of_bookcover", "#5e3d8f", 0.55)
 book_spine = outfit_mat("of_bookspine", "#462c6e", 0.55)
 book_pages = outfit_mat("of_pages", "#fff3dc", 0.8)
 book_ribbon = outfit_mat("of_ribbon", "#ff7eb6", 0.6)
-BOOK = local_empty("BookFrame", ARM[-1], (-HAND_AT.x, 0.03, HAND_AT.z), (0, math.radians(-8), 0))
+BOOK = local_empty("BookFrame", ARM[-1], (-HAND_AT.x, -0.2, HAND_AT.z), (0, math.radians(-8), 0))   # in front of her tails
 BW, BH, BT = 0.34, 0.42, 0.085          # width, height, thickness
 BZ = 0.2                                # book middle, above her mitten
 OUTFITS["book"] = []
@@ -1457,7 +1457,8 @@ blade_m = outfit_mat("of_blade", "#e3e9f2", 0.25)
 fuller_m = outfit_mat("of_fuller", "#b7c6e4", 0.3)
 grip_m = outfit_mat("of_grip", "#6b5fb5", 0.6)
 gem_m = outfit_mat("of_gem", "#ff7eb6", 0.2)
-SWORD = local_empty("SwordFrame", ARM[1], (HAND_AT.x, -0.02, HAND_AT.z), (0, math.radians(36), 0))
+# (it sits forward and leans toward you a little, so it's in front of her twin tails, not behind them)
+SWORD = local_empty("SwordFrame", ARM[1], (HAND_AT.x, -0.25, HAND_AT.z), (math.radians(30), math.radians(36), 0))
 SWORD.scale = (1.4, 1.4, 1.4)           # big enough to read at her real size on screen
 OUTFITS["sword"] = []
 bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.026, depth=0.15)
