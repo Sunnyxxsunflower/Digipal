@@ -187,6 +187,25 @@ BATTERY_LOW = 20                   # she gets hungry at this battery percent
 
 WELCOME_LINES = ["Welcome back!", "Welcome back! I missed you~", "You're back! Yay!"]
 STEAM_OPEN_LINES = ["Game time?", "Ooh, Steam! Game time?"]
+# the first-time tour (brand new Digis): each step is what she says + the buttons under her
+INTRO_STEPS = [
+    ("Hi hi! I'm Digi, your new desktop pal! \U0001F49C I'll keep you company while you work and play.",
+     [("Hi Digi!", "next")]),
+    ("NAME", []),
+    ("You can pick me up and carry me anywhere: just drag me with your mouse! Wheee~",
+     [("Next \u25B8", "next")]),
+    ("Right-click me any time for my menu: timers, games, my modes, meditation and lots more!",
+     [("Next \u25B8", "next")]),
+    ("Want to change my hair or give me a cute hat? Shift-click me, or right-click \u2192 Customize Digi! \u2728",
+     [("Show me!", "customize"), ("Next \u25B8", "next")]),
+    ("I can keep your lists too: water, to-dos, reminders and birthdays. "
+     "They're on the Lists tab in Customize! \U0001F4CB", [("Show me!", "lists"), ("Next \u25B8", "next")]),
+    ("I can also meditate with you, watch movies or play games in the corner, "
+     "and remind you to drink water~ Check out Modes in my menu!", [("Next \u25B8", "next")]),
+    ("That's the tour! I'll be right here whenever you need me. Let's be friends! \U0001F49C",
+     [("Yay!", "done")]),
+]
+
 # the modes row (right-click > Modes): one round button each
 MODE_BUTTONS = [("\U0001F3AE\nGames", "gaming"), ("\U0001F37F\nMovie", "movie"),
                 ("\U0001F3A5\nStream", "stream"), ("\U0001F4E3\nCheer", "cheer"),
@@ -3220,6 +3239,8 @@ class Pet(QWidget):
         self.bubble_pos = "above"         # above her head, or beside her (tall and narrow)
         self.bubble_win = None
         self.nickname = ""                # what she calls you (empty = no name)
+        self.intro_done = False           # the first-time hello tour (brand new Digis only)
+        self.intro_step = -1
         self.place = None                 # {"name", "lat", "lon"} for the weather
         self.units = "F"
         self.dnd_days = list(DND_DAYS)
@@ -3601,6 +3622,9 @@ class Pet(QWidget):
         """Says hi when the app opens, depending on the time of day."""
         if self.reminder_active:
             return
+        if not self.intro_done:             # brand new Digi: the hello tour instead
+            self.start_intro()
+            return
         if self.msg and tries < 3:          # she's saying something else - say hi right after
             QTimer.singleShot(4000, lambda: self.greet(tries + 1))
             return
@@ -3631,6 +3655,62 @@ class Pet(QWidget):
             QTimer.singleShot(4500, lambda: self.say(
                 "See my glow? \u2728 It's so I don't get lost in dark mode! "
                 "(You can turn it off in Customize)", 6000))
+
+    # ---------- the first-time tour: she introduces herself and shows you around ----------
+    def start_intro(self):
+        self.intro_step = 0
+        self.happy = 40
+        self.jump = 20
+        self.intro_show()
+
+    def intro_show(self):
+        i = self.intro_step
+        if i < 0 or i >= len(INTRO_STEPS):
+            return
+        text, buttons = INTRO_STEPS[i]
+        if text == "NAME":
+            self.say("First things first... what should I call you? \U0001F60A", 120000)
+            QTimer.singleShot(400, self.intro_ask_name)
+            return
+        self.say(text, 120000)
+        if i < len(INTRO_STEPS) - 1:
+            buttons = buttons + [("Skip tour", "skip")]
+        self.show_choices(buttons, self.intro_pick)
+
+    def intro_ask_name(self):
+        dlg = QInputDialog()
+        dlg.setWindowTitle("Nice to meet you!")
+        dlg.setLabelText("What should Digi call you?")
+        dlg.setTextValue(self.nickname)
+        dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowStaysOnTopHint)
+        ok = dlg.exec()
+        name = dlg.textValue().strip()[:24] if ok else ""
+        if name:
+            self.nickname = name
+            self.save_custom()
+            self.say(f"{name}! What a lovely name! Nice to meet you~ \U0001F49C", 3500)
+        else:
+            self.say("That's okay! You can tell me later in Customize \u2192 Me~", 3500)
+        self.happy = 40
+        self.intro_step += 1
+        QTimer.singleShot(3600, self.intro_show)
+
+    def intro_pick(self, key):
+        if key == "skip" or key == "done":
+            self.intro_done = True
+            self.intro_step = -1
+            self.save_custom()
+            self.say("Okay! I'll be right here if you need me \U0001F49C" if key == "skip"
+                     else "Yay! Let's be friends! \U0001F49C", 3000)
+            self.happy = 50
+            self.jump = 20
+            return
+        if key == "customize":
+            self.open_customize(0)
+        elif key == "lists":
+            self.open_customize(3)
+        self.intro_step += 1
+        self.intro_show()
 
     # ---------- your own art ----------
     def load_art(self):
@@ -4234,6 +4314,7 @@ class Pet(QWidget):
                           ("Thunder", lambda *a: self.weather_react("thunder"))]:
             wm.addAction(label, fn)
         tm.addSeparator()
+        tm.addAction("The hello tour (first-time intro)", self.start_intro)
         tm.addAction("Meditation invite", self.invite_meditation)
         tm.addAction("A test reminder", lambda: self.remind("Time for dinner!"))
         tm.addAction("Steam status", self.show_steam_status)
@@ -6094,7 +6175,8 @@ class Pet(QWidget):
                            "med_days": self.med_days[-400:], "med_total": self.med_total,
                            "med_guide": self.med_guide, "med_time": self.med_time,
                            "med_asked_day": self.med_asked_day, "med_sound": self.med_sound,
-                           "med_volume": self.med_volume, "med_chime": self.med_chime}, f)
+                           "med_volume": self.med_volume, "med_chime": self.med_chime,
+                           "intro_done": self.intro_done}, f)
         except Exception:
             pass
 
@@ -6164,6 +6246,8 @@ class Pet(QWidget):
             if d.get("outline") in ("glow", "off"):
                 self.outline = d["outline"]
             self.glow_told = bool(d.get("glow_told", False))
+            # someone who already had Digi before the tour existed has met her already
+            self.intro_done = bool(d.get("intro_done", True))
             if d.get("text_size") in ("small", "medium", "large"):
                 self.text_size = d["text_size"]
         except Exception:
