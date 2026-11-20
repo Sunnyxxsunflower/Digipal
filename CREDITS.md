@@ -1,5 +1,17 @@
 # Credits
 
+## Art
+
+**Art created by Sunny**, the creator of DigiPal. Every piece is hand drawn in Procreate:
+
+- **Digi herself**: her character design, which her 3D model is built from.
+- **The app icon** (`icon.png`).
+- **Digi's room** in Customize (`studio/room/digi_room_drawing.png`, textured into `digi_room.png`).
+- **Outfit designs**: the sketches behind Digi's outfits, like the beret, sun hat, bow and bunny ears.
+- **The dragon book cover** (`studio/book_cover.png`), on the book Digi carries on game night.
+
+Please don't reuse Sunny's art outside DigiPal without asking her first.
+
 ## Sounds (Calm tab)
 
 - **White noise, pink noise**: made from scratch for Digi (`studio/make_sounds.py`).

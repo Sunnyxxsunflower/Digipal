@@ -4,6 +4,8 @@
 
 Made with love (and a little help from Claude).
 
+**All of Digi's art was created by Sunny**, hand drawn in Procreate: Digi's character design, the app icon, Digi's room, the outfit designs and the dragon book cover. See [CREDITS.md](CREDITS.md).
+
 ## Install on Windows
 
 1. Install **Python** from [python.org](https://www.python.org/downloads/) (on the first screen, tick **"Add python.exe to PATH"**).
@@ -16,7 +18,9 @@ Made with love (and a little help from Claude).
 ### Make her yours
 Shift-click Digi (or right-click → **Customize Digi**):
 - **Look:** hair style, hair color, skirt or shorts, outfits, speech bubble.
-- **Personal settings:** your name, your city (for weather), your reminders, bedtime and game nights.
+- **Personal settings:** your name, your city (for weather), bedtime.
+- **Lists:** water, to-dos, reminders, birthdays.
+- **Game night:** your tabletop games (D&D, Monster of the Week, Mothership...), turn order, and session notes.
 
 ### Talking to Digi
 Hold-click her and talk, or double-click her. For voice, turn these on in Windows **Settings → Privacy & security**:
