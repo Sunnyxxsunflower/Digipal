@@ -5043,10 +5043,12 @@ class Pet(QWidget):
         get away from you or close on you while you're looking through it."""
         self.menu_open = True
         self.walking = False
+        opened = time.time()
         try:
             menu.exec(pos)
         finally:
             self.menu_open = False
+            print("menu: open %.1f s" % (time.time() - opened), file=sys.stderr, flush=True)
             self.idle_cd = max(self.idle_cd, 250)      # and a little pause before she wanders off
 
     # ---------- water ----------
@@ -8483,7 +8485,9 @@ class Pet(QWidget):
 
     def tick(self):
         self.t += 1
-        if IS_MAC and self.t % 50 == 1:                # every 2 seconds: still floating on top?
+        # every 2 seconds: still floating on top? (not while her menu is open: putting her window
+        # back in front closes an open menu on a Mac)
+        if IS_MAC and self.t % 50 == 1 and not self.menu_open:
             for w in (self, self.bubble_win, self.choice_bar):
                 mac_keep_floating(w)
         try:
